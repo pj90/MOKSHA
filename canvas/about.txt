@@ -1,0 +1,1 @@
+This folder contains images for background and hud overlay/underlay etc.
