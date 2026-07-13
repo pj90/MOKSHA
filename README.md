@@ -420,3 +420,4 @@ gameReadinessMode = (audioLoadFailures.length === 0) ? 'high' : 'low';
 #
 * Play the prototype now on [itch.io](https://pj904ich.itch.io/moksha)
 * Support the development of MOKSHA on [PayPal](https://paypal.me/pankajsharma18)
+* Buy me a coffee [ko-fi](ko-fi.com/pankajsharma84017)
