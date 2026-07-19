@@ -101,7 +101,7 @@ The game is built on **Katha Upanishad's chariot metaphor** (Nachiketopakhyana):
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/your-username/moksha.git
+git clone https://github.com/weirdcodesofficial/MOKSHA.git
 cd moksha
 
 # 2. Serve locally (required for audio — file:// blocks fetch)
