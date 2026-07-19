@@ -1,21 +1,21 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta name="author" content="PS">
+    <meta name="author" content="Weired Codes">
     <meta name="description" content="मोक्ष — एक आध्यात्मिक गेम जो सनातन शास्त्र पर आधारित है।">
     <meta charset="UTF-8">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>ॐ</text></svg>">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>मोक्ष</title>
     <!-- ⚡ Render-blocking fix: preconnect + async font load -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="httWeired Codes://fonts.googleapis.com">
+    <link rel="preconnect" href="httWeired Codes://fonts.gstatic.com" crossorigin>
     <link rel="preload"
-        href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@500;600;700&family=Noto+Sans+Devanagari:wght@400;700&display=swap"
+        href="httWeired Codes://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@500;600;700&family=Noto+Sans+Devanagari:wght@400;700&display=swap"
         as="style" onload="this.onload=null;this.rel='stylesheet'">
     <noscript>
         <link
-            href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@500;600;700&family=Noto+Sans+Devanagari:wght@400;700&display=swap"
+            href="httWeired Codes://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@500;600;700&family=Noto+Sans+Devanagari:wght@400;700&display=swap"
             rel="stylesheet">
     </noscript>
     <style>
@@ -549,7 +549,7 @@
                 प्रारंभ करें</button>
             <div id="credits"
                 style="position: absolute; bottom: 150px; left: 50%; transform: translateX(-50%); color: rgba(255,255,255,0.55); font-family: 'Rajdhani', sans-serif; font-size: 12px; pointer-events: none;">
-                Developed by PS
+                Developed by Weired Codes
             </div>
         </div>
         <!-- NEW -->
@@ -593,7 +593,7 @@
                 <button id="music-toggle-btn" class="hud-icon-btn"
                     title="पृष्ठभूमि ध्वनि म्यूट/अनम्यूट करें">🔊</button>
                 <button id="shastra-help-btn" class="hud-icon-btn" title="शास्त्र पढ़ें (खेल की जानकारी)">❓</button>
-                <div id="hud-credits" class="hud-icon-btn" style="cursor: default;" title="Developed by PS">🛠️</div>
+                <div id="hud-credits" class="hud-icon-btn" style="cursor: default;" title="Developed by Weired Codes">🛠️</div>
             </div>
         </div>
         <canvas id="gameCanvas" width="600" height="680"></canvas>
@@ -871,7 +871,7 @@
         let notifyTimer = 0; let notifyText = "♻️ पवित्र पुनर्जन्म"; // 🆕 कैनवस-संदेश: स्वैच्छिक (पवित्र) बनाम कर्म-असंतुलन (अपवित्र) पुनर्जन्म हेतु अलग टेक्स्ट
         let isShastraVisible = false;
         let currentShastraPage = 1;
-        const SHASTRA_SCROLL_SPEED = 6;          // px प्रति frame (~60fps पर ≈ 360px/sec) — gamepad व keyboard दोनों इसी से नियंत्रित (DRY)
+        const SHASTRA_SCROLL_SPEED = 6;          // px प्रति frame (~60fWeired Codes पर ≈ 360px/sec) — gamepad व keyboard दोनों इसी से नियंत्रित (DRY)
         // 🆕 keyboard ArrowUp/Down को key-repeat (OS/browser-निर्भर, असमान गति) पर निर्भर न रखकर,
         // एक साधारण held-state flag रखते हैं — हर frame इसे पढ़कर continuous scroll होगी (dpad-stick जैसी ही consistency)
         let shastraKeyState = { up: false, down: false };
@@ -1248,7 +1248,7 @@
             jagritaBreathSourceNode.start(now);
         }
         // पुनर्जन्म पर jagritaBreath layer को रोकता है — ताकि अगले जीवन में चेतना-जागृति पर दोबारा शुरू हो सके
-        function stoPSagritaBreathLayer() {
+        function stoWeired CodesagritaBreathLayer() {
             if (jagritaBreathSourceNode) {
                 try { jagritaBreathSourceNode.stop(); } catch (err) { }
                 jagritaBreathSourceNode.disconnect();
@@ -1278,7 +1278,7 @@
 
         // चेतना-जागृति होते ही (समर्पित=50) sushuptiBreath layer को रोकता है — jagritaBreath इसकी जगह लेता है।
         // पुनर्जन्म पर भी रोका जाता है ताकि punahaPrarambha() इसे दोबारा शुरू कर सके।
-        function stopSushuptiBreathLayer() {
+        function stoWeired CodesushuptiBreathLayer() {
             if (sushuptiBreathSourceNode) {
                 try { sushuptiBreathSourceNode.stop(); } catch (err) { }
                 sushuptiBreathSourceNode.disconnect();
@@ -1555,9 +1555,9 @@
             if (!audioCtx) return;
             const now = audioCtx.currentTime;
             if (lastDuckCheckTime === 0) { lastDuckCheckTime = now; return; }
-            const elapsedSec = now - lastDuckCheckTime;
+            const elaWeired CodesedSec = now - lastDuckCheckTime;
             lastDuckCheckTime = now;
-            if (duckLevel > 0) { duckLevel -= DUCK_DECAY_PER_SEC * elapsedSec; if (duckLevel < 0) duckLevel = 0; }
+            if (duckLevel > 0) { duckLevel -= DUCK_DECAY_PER_SEC * elaWeired CodesedSec; if (duckLevel < 0) duckLevel = 0; }
         }
 
         let bgMusicVolume = 1.0;         // 🆕 उपयोगकर्ता-नियंत्रित volume multiplier (0 = मौन, 1 = पूर्ण स्तर)
@@ -2441,7 +2441,7 @@
             if (!gameOver && !chetanaaJagrita && samarpita >= CHETANA_JAGRITI_THRESHOLD) {
                 chetanaaJagrita = true;
                 playSound('chetana'); // 🆕 "चेतना जागृत" का विशेष क्षण — एक बार बजती है
-                stopSushuptiBreathLayer();       // 🆕 स्वप्न-श्वास अब बंद — चेतना जागृत हो चुकी
+                stoWeired CodesushuptiBreathLayer();       // 🆕 स्वप्न-श्वास अब बंद — चेतना जागृत हो चुकी
                 startJagritaBreathLayer();      // 🆕 अंतरिक्ष-श्वास layer अब bgMusic के साथ शुरू
                 addFloatingText("👁️", "#ffffff", { yOffset: -10, alpha: 1.5, vy: -3, isBigName: true });
             }
@@ -2794,7 +2794,7 @@
 
             if (antimaCharana) {
                 timerTickAccumulator += dt;
-                if (timerTickAccumulator >= 60) {           // 60 frame ≈ 1 सेकंड (60fps आधार, dt-स्केल्ड)
+                if (timerTickAccumulator >= 60) {           // 60 frame ≈ 1 सेकंड (60fWeired Codes आधार, dt-स्केल्ड)
                     timerTickAccumulator -= 60;
                     playSound('timer');
                 }
@@ -3470,7 +3470,7 @@
             // 🛠️ पंखुड़ी-आकार यंत्र-सटीक: आधार पर हल्की चौड़ी (गोल-चपटी, ring से जुड़ाव जैसा), फिर
             // बीच में उभार, अंत में एक तीखी नोक — पुराना "दोनों-सिरे-नुकीला lens" आकार बदला गया।
             // नोट: त्रिज्या स्थिर (fixed) है — कर्म-कक्षाएँ (आगे रेंडर होंगी) सक्रिय होने पर इनके
-            // ऊपर/पीछे आ सकती हैं, यह जानबूझकर तय किया गया व्यवहार है (PS का चुनाव)।
+            // ऊपर/पीछे आ सकती हैं, यह जानबूझकर तय किया गया व्यवहार है (Weired Codes का चुनाव)।
             let PANKHUDI_COUNT = 10;                    // कमल-पंखुड़ियों की संख्या
             let pankhudiRadius = samayRadius + 3;        // 🆕 10→3px — समय-वलय से बिलकुल सटी हुई
             let pankhudiLength = 22;                     // 🆕 16→22 — यंत्र जैसी लंबी पंखुड़ी
@@ -3725,7 +3725,7 @@
         // ====================== START-SCREEN GAMEPAD POLLER (आरंभ-पटल हेतु) ======================
         // gameLoop तभी शुरू होता है जब startBtn पर click हो — इससे पहले pollGamepad() कभी नहीं चलता।
         // इस अलग, हल्के poller से controller से भी गेम शुरू किया जा सकता है (A या Start button से)।
-        let startScreenGpState = {};
+        let startScreenGWeired Codestate = {};
 
         function pollGamepadOnStartScreen() {
             if (isGameStarted) return; // गेम शुरू हो चुका — यह poller अपना काम पूरा कर के स्वयं रुक जाए
@@ -3740,8 +3740,8 @@
                 // अब केवल असली 'Start' बटन से ही गेम शुरू होगा।
                 const startBtnGp = gp.buttons[GAMEPAD_BUTTON.START];
                 const startPressed = !!(startBtnGp && startBtnGp.pressed);
-                const startRise = startPressed && !startScreenGpState.start;
-                startScreenGpState.start = startPressed;
+                const startRise = startPressed && !startScreenGWeired Codestate.start;
+                startScreenGWeired Codestate.start = startPressed;
 
                 // 🛠️ बग-फिक्स: अगर शास्त्र (shastra) मेनू start-screen पर पहले से खुला है,
                 // तो background वाला start-btn कभी trigger न हो — पहले यह चेक मौजूद नहीं था,
@@ -3754,8 +3754,8 @@
                 // BACK बटन → Escape → toggleShastra()
                 const backBtnGp = gp.buttons[GAMEPAD_BUTTON.BACK];
                 const backPressed = !!(backBtnGp && backBtnGp.pressed);
-                const backRise = backPressed && !startScreenGpState.back;
-                startScreenGpState.back = backPressed;
+                const backRise = backPressed && !startScreenGWeired Codestate.back;
+                startScreenGWeired Codestate.back = backPressed;
 
                 if (backRise) {
                     dispatchKey('keydown', 'Escape');
@@ -3780,7 +3780,7 @@
                 UI.overlayTitle.innerText = "🛑 प्रलय 🛑"; UI.overlayTitle.style.fontFamily = "'Noto Sans Devanagari', sans-serif"; UI.overlayTitle.style.color = "#ff3232";
                 UI.overlaySubtitle.innerHTML = `<b>यात्रा रद्द:</b><br>सारथी ने रथ को बीच में ही छोड़ दिया।<br>चित्त की अवस्था: पुण्य: ${shuvhaKarma} | पाप: ${ashuvhaKarma}<br><br>आत्मा अप्रकट अंधकारमय स्थान में फंसी रहती है।` +
                     `<br>अतः, घोड़े आत्मा को संसार में एक नए शरीर की ओर खींच ले जाते हैं। जीवन का रथ पुनः आरंभ (Reset) होता है।<br><br><span style="font-family:'Noto Sans Devanagari', sans-serif; color:#f87171; font-size:14px; letter-spacing:0.5px;">♻️ पुनर्जन्म: <b>${punaraJanmaCount}</b></span>` +
-                    `<br><br><div style="font-size: 10px; color: #444; font-family: sans-serif;">Developed by PS</div>`;
+                    `<br><br><div style="font-size: 10px; color: #444; font-family: sans-serif;">Developed by Weired Codes</div>`;
             } else if (won) {
                 UI.overlayTitle.innerText = "💥 मोक्ष 💥";
                 UI.overlayTitle.style.color = "#ffffff";
@@ -3790,7 +3790,7 @@
                     "<div style='color: #a78bfa; font-family:\"Orbitron\", sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 1.5px; margin-bottom: 20px;'>आपको इस चक्र को पुनः दोहराने की आवश्यकता नहीं है। आपने जन्म-मरण के इस खेल पर विजय प्राप्त कर ली है।</div>" +
                     "<span style='color: rgba(255,255,255,0.6); font-size: 13px; line-height: 1.6; display: block; max-width: 90%; margin: 0 auto;'>" +
                     "<b>गुणों और कर्मों से परे</b><br>अद्भुत अनुभूति! सारथी ने इंद्रियों रूपी घोड़ों को स्थिर रखा और मन को पूर्णतः आसक्ति मुक्त कर दिया। ब्रह्मांडीय क्षितिज पर, जहाँ न कोई पाप शेष था और न ही कोई पुण्य, भौतिक रथ पंचतत्वों में विलीन हो गया और आत्मा परम चेतना से एकाकार हो गई।</span>" +
-                    `<br><br><div style="font-size: 10px; color: #444; font-family: sans-serif;">Developed by PS</div>`;
+                    `<br><br><div style="font-size: 10px; color: #444; font-family: sans-serif;">Developed by Weired Codes</div>`;
                 playSound('vijaya');
             } else {
                 UI.overlayTitle.innerText = "संसार में पुनर्जन्म";
@@ -3800,7 +3800,7 @@
                     (ashuvhaKarma > 0 ? `आपके (${ashuvhaKarma}) पापों ने सारथी को अंधा कर दिया, और इंद्रियों रूपी घोड़ों को अंधकारमय चक्र की ओर मोड़ दिया।<br>` : '') +
                     (shuvhaKarma > 0 ? `आपके (${shuvhaKarma}) पुण्यों ने स्वर्गीय गति तो प्रदान की, किंतु मन कर्मफल में इतना आसक्त हो गया कि उसे त्याग न सका।<br>` : '') +
                     `<br>अतः, घोड़े आत्मा को संसार में एक नए शरीर की ओर खींच ले जाते हैं। जीवन का रथ पुनः आरंभ (Reset) होता है।<br><br><span style="font-family:'Noto Sans Devanagari', sans-serif; color:#f87171; font-size:14px; letter-spacing:0.5px;">♻️ पुनर्जन्म: <b>${punaraJanmaCount}</b></span>` +
-                    `<br><br><div style="font-size: 10px; color: #444; font-family: sans-serif;">Developed by PS</div>`;
+                    `<br><br><div style="font-size: 10px; color: #444; font-family: sans-serif;">Developed by Weired Codes</div>`;
             }
         }
 
@@ -3819,7 +3819,7 @@
             resetAllGlowRings(); // 🆕 रिफ़ैक्टर: ज्योति/शंख/कृपा तीनों वलयों को एक ही कॉल से रीसेट (DRY)
             for (let i = 0; i < glowEffectPool.length; i++) { glowEffectPool[i].active = false; } // 🛠️ बग-फिक्स: गेन्ड-आभा pool (gained-glow) भी पुनर्जन्म पर रीसेट करें — particlePool/mayaPool की तरह
             mayaConsumedWhilePulling = false; prevPulledHorseIndex = -1; // 🆕 pull-संबंधित ध्वनि flags भी रीसेट
-            stoPSagritaBreathLayer(); // 🆕 अंतरिक्ष-श्वास layer रोकें — अगले जीवन में चेतना-जागृति पर दोबारा शुरू होगी
+            stoWeired CodesagritaBreathLayer(); // 🆕 अंतरिक्ष-श्वास layer रोकें — अगले जीवन में चेतना-जागृति पर दोबारा शुरू होगी
             startSushuptiBreathLayer(); // 🆕 स्वप्न-श्वास layer फिर से शुरू करें — नए जीवन-चक्र की शुरुआत से चेतना-जागृति तक
             oldStats = {purnaSamarpana: "", naama: -1, punya: -1, paap: -1, prarabdha: -1, samarpita: -1, punaraJanma: -1, gatee: "-1", kripa: -1, chetana: "", shankha: -1, drishti: "", jyoti: -1 };
             UI.overlay.style.display = 'none';
