@@ -65,8 +65,6 @@ The game is built on **Katha Upanishad's chariot metaphor** (Nachiketopakhyana):
 | **शंख** (Conch) | `shankha` | Dispels cyclone (तूफ़ान) of Maya |
 | **ज्योति** (Lamp) | `jyoti` | Restores vision in the darkness of bad karma |
 
----
-
 ## 🎮 Controls
 
 | Action | Keyboard | Gamepad | Spiritual Meaning |
