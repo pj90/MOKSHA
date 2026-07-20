@@ -738,12 +738,17 @@
         </div>
     </main>
 
+    <script src="src/audio.js"></script>
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d', {
             alpha: false,           // background transparent नहीं — compositing cost बचे
             willReadFrequently: false // getImageData() नहीं होता — GPU path optimize हो
         });
+
+        const playSound = (...args) => AudioManager.playSound(...args);
+        const updateAmbientVolumes = () => AudioManager.updateAmbientVolumes();
+        const ensureAudio = () => AudioManager.ensureAudio();
 
         const UI = {
             container: document.getElementById('gameContainer'),
@@ -916,736 +921,6 @@
             // (mouse-wheel के discrete बड़े deltaY पर भी ठीक काम करता है, trackpad के छोटे/तेज़ deltaY पर भी)।
             body.scrollTop += e.deltaY;
         }, { passive: false });
-
-        let audioCtx = null;
-        let audioUnlocked = false;
-
-        // ====================== तत्परता (READINESS) ट्रैकिंग ======================
-        // 🆕 जब तक fonts + सभी ऑडियो-लोड-प्रयास (सफल/विफल दोनों गिने जाते हैं) + पहला scaleGame() —
-        // ये तीनों पूर्ण न हो जाएँ, तब तक loading-overlay दिखता रहेगा व start-btn निष्क्रिय रहेगा।
-        let isFontsReady = false;
-        let isAudioPreloadDone = false;
-        let isScaleGameDone = false;
-        let isGameFullyReady = false;     // एक बार तय होने पर दोबारा नहीं बदलेगा
-        let gameReadinessMode = null;     // 'high' (सब कुछ मिला) | 'low' (कुछ ऑडियो विफल — graceful fallback)
-        let audioLoadFailures = [];       // विफल ऑडियो-फ़ाइलों के URL यहाँ जुड़ेंगे (Low-Mode निर्णय हेतु)
-        let readinessTimeoutId = null;    // सुरक्षा-समय-सीमा (कभी भी अनंतकाल तक न फँसे)
-
-        // ====================== MP3 ऑडियो बफ़र्स (बाहरी साउंड फ़ाइलें) ======================
-        // 🆕 ये 4 असली mp3 फ़ाइलें (./audio/ फ़ोल्डर से) पहले से सिंथेसाइज़्ड टोन की जगह/साथ बजाई जाएँगी।
-        // सभी फ़ाइलें AudioBuffer के रूप में पहले से (preload) मेमोरी में decode करके रखी जाती हैं,
-        // ताकि playback के समय कोई lag/network-delay न हो।
-        let audioBuffers = {
-            bgMusic: null,          // पृष्ठभूमि संगीत — ओम-हम के नीचे हल्के अतिरिक्त layer के रूप में लूप होगा
-            naamaSamarpita: null,   // नाम समर्पण ध्वनि
-            samarpita: null,        // समर्पण ध्वनि
-            chetanaJagrita: null,    // "चेतना" क्षण की विशेष ध्वनि (एक बार बजती है)
-            punarJanma: null,       // पुनर्जन्म ध्वनि
-            pralaya: null,          // प्रलय/अंतिम क्षण की ध्वनि
-            shathendriya: null,    // दौड़ते घोड़ों की ध्वनि (bgMusic के साथ निरंतर लूप में मिक्स होने वाला अतिरिक्त ambient-layer)
-            jagritaBreath: null,      // चेतना-जागृति के बाद का अंतरिक्ष-श्वास (cosmic breath) layer — समर्पित=50 (chetanaaJagrita) होने पर शुरू होता है
-            sushuptiBreath: null,
-            timer: null,
-            prarabdhaBandhana: null,
-            paapaBandhana: null,
-            punyaBandhana: null,
-            bandhanMukta: null,
-            naamaDhwani: null,       //नाम-संग्रह ध्वनि
-            moksha: null,
-            aakarshana: null,
-            tyaaga: null,
-            jaapaDhwani: null,       // नाम-जाप ध्वनि
-            antimCharana: null,
-            kripaDhwani: null,
-            shankhaDhwani: null,  // 🆕 Y-press पर शंख-ध्वनि
-            jyotiDhwani: null,     // 🆕 B-press पर ज्योति-ध्वनि
-            shankhaPrapta: null,    // 🆕 शंख-संग्रह (प्राप्ति) ध्वनि — collection-only
-            jyotiPrapta: null,   // 🆕 ज्योति-संग्रह (प्राप्ति) ध्वनि — collection-only
-            purnaSamarpana: null,   // 🆕 "अंतिम चरण" में समस्त नाम के पूर्ण-समर्पण की ध्वनि
-            drishti: null,          // 🆕 पाप-अंधकार से दृष्टि लौटने (ashuvhaKarma < 3 होने) की ध्वनि
-            andhakaara: null        // 🆕 पाप-अंधकार छाने (ashuvhaKarma >= 3 होने) की ध्वनि
-        };
-
-        let bgMusicSourceNode = null;          // bgMusic.mp3 का चल रहा लूप-source (ताकि दोबारा शुरू न हो)
-        let bgMusicMp3Gain = null;             // bgMusic.mp3 layer का अपना gain node
-        const BG_MUSIC_MP3_LAYER_VOLUME = 0.01 // 🆕 अब स्थिर (static) स्तर — सांस से असंबद्ध, बहुत हल्का ताकि घोड़े व SFX हावी रहें
-
-        // 🆕 दौड़ते घोड़ों की ध्वनि — bgMusic के साथ निरंतर लूप में मिक्स होने वाला अतिरिक्त ambient-layer
-        let shathendriyaSourceNode = null;
-        let shathendriyaGain = null;
-        const RUNNING_HORSES_VOLUME = 0.16; // 🆕 अब स्थिर (static) स्तर — सांस से असंबद्ध, स्पष्ट रूप से सुनाई देने लायक
-        // 🆕 चेतना-जागृति के बाद का अंतरिक्ष-श्वास (cosmic breath) layer — समर्पित=50 (chetanaaJagrita) होने पर शुरू होता है
-        let jagritaBreathSourceNode = null;
-        let jagritaBreathGain = null;
-        const JAGRITA_BREATH_VOLUME = 0.22; // 🆕 अब केवल यही layer सांस (breath) से सिंक रहेगी
-        // 🆕 चेतना-जागृति से पहले का "स्वप्न-श्वास" (dream breath) layer — खेल आरंभ से चेतना-जागृति (समर्पित=50) तक बजता है
-        let sushuptiBreathSourceNode = null;
-        let sushuptiBreathGain = null;
-        const SUSHUPTI_BREATH_VOLUME = 1; // jagritaBreath जैसा ही स्तर — सांस (breath) से सिंक रहेगा
-        let lastSamarpitaSoundTime = 0;        // 🌿 debounce हेतु: अंतिम बार 'समर्पित' ध्वनि कब बजी (ms)
-        const SAMARPITA_SOUND_COOLDOWN = 90;   // ms — तेज़ गति से कई टकराव होने पर ध्वनि धुंधली (muddy) होने से रोकता है
-
-        function debounce(func, delay) { let timeoutId; return function () { clearTimeout(timeoutId); timeoutId = setTimeout(func, delay); }; }
-        // ====================== तत्परता-निर्णय (READINESS DECISION) ======================
-        // जब भी कोई एक शर्त (fonts/audio/scale) पूर्ण होती है, यह जाँचता है कि बाकी सब भी पूर्ण हैं या नहीं
-        function checkReadiness() {
-            if (isGameFullyReady) return; // एक बार निर्णय हो जाने पर दोबारा मत बदलो
-            if (!isFontsReady || !isAudioPreloadDone || !isScaleGameDone) return;
-            finalizeReadiness();
-        }
-
-        // अंतिम निर्णय — High या Low mode तय करता है व ओवरले/बैज को सूचित करता है
-        function finalizeReadiness() {
-            if (isGameFullyReady) return;
-            isGameFullyReady = true;
-            gameReadinessMode = (audioLoadFailures.length === 0) ? 'high' : 'low';
-            if (audioLoadFailures.length > 0) {
-                console.warn('🟡 Low Mode — निम्न ऑडियो-फ़ाइलें लोड नहीं हो सकीं:', audioLoadFailures);
-            }
-            if (readinessTimeoutId) { clearTimeout(readinessTimeoutId); readinessTimeoutId = null; }
-            showReadyState();
-        }
-
-        // ओवरले को fade-out करता है, footer-बैज अपडेट करता है, व start-btn को सक्रिय करता है
-        function showReadyState() {
-            const overlay = document.getElementById('loading-overlay');
-            const badge = document.getElementById('mode-badge');
-            const startBtn = document.getElementById('start-btn');
-
-            if (badge) {
-                if (gameReadinessMode === 'high') {
-                    badge.textContent = '🟢 उच्च मोड';
-                    badge.title = 'सभी संसाधन सफलतापूर्वक लोड हुए — पूर्ण अनुभव सक्रिय';
-                } else {
-                    badge.textContent = '🟡 निम्न मोड';
-                    badge.title = 'कुछ ध्वनि-संसाधन लोड नहीं हो सके (धीमा नेट/पुराना डिवाइस) — मूल अनुभव सक्रिय, खेल पूर्णतः खेलने-योग्य है';
-                }
-            }
-
-            if (overlay) {
-                overlay.style.opacity = '0';
-                overlay.style.pointerEvents = 'none';
-                setTimeout(() => { overlay.style.display = 'none'; }, 520); // CSS transition (0.5s) पूर्ण होने के बाद
-            }
-
-            if (startBtn) {
-                startBtn.disabled = false;
-            }
-        }
-
-        // ====================== ऑडियो-प्रीलोड — पेज-लोड होते ही (gesture की प्रतीक्षा बिना) ======================
-        // 🆕 best-optimization हेतु: AudioContext बिना user-gesture के भी बनाया जा सकता है (suspended रहेगा),
-        // और suspended-context पर भी decodeAudioData() काम करता है — इसलिए सारी ध्वनियाँ ओवरले के पीछे
-        // ही चुपचाप तैयार हो जाएँगी। पहले gesture पर ensureAudio() सिर्फ़ resume() करेगा (दोबारा लोड नहीं)।
-        function initAudioPreload() {
-            try {
-                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-                if (!AudioContextClass) {
-                    isAudioPreloadDone = true; checkReadiness(); return;
-                }
-                audioCtx = new AudioContextClass();
-                loadAllAudioBuffers().then(() => {
-                    isAudioPreloadDone = true;
-                    checkReadiness();
-                });
-            } catch (err) {
-                console.warn('⚠️ ऑडियो-प्रीलोड प्रारंभ नहीं हो सका:', err);
-                isAudioPreloadDone = true;
-                checkReadiness();
-            }
-        }
-        initAudioPreload();
-
-        // fonts तैयार होने की जाँच — Devanagari/Orbitron/Rajdhani लोड होते ही flag सेट करें
-        if (document.fonts && document.fonts.ready) {
-            document.fonts.ready.then(() => { isFontsReady = true; checkReadiness(); });
-        } else {
-            isFontsReady = true; // पुराना browser जो FontFaceSet अपी न दे — आगे बढ़ें
-        }
-
-        // 🆕 सुरक्षा-समय-सीमा — फ़ाइलें बहुत छोटी (KB-स्तर) हैं, इसलिए सामान्य/धीमे नेट पर भी यह पर्याप्त है।
-        // इस सीमा के बाद भी कोई शर्त पूरी न हो तो ज़बरदस्ती Low-Mode मानकर आगे बढ़ें — खिलाड़ी कभी न फँसे।
-        readinessTimeoutId = setTimeout(() => {
-            console.warn('⚠️ तत्परता-समय-सीमा (6s) पार हो गई — Low Mode में आगे बढ़ रहे हैं');
-            isFontsReady = true; isAudioPreloadDone = true; isScaleGameDone = true;
-            finalizeReadiness();
-        }, 6000);
-
-        // किसी एक mp3 URL को fetch करके AudioBuffer में decode करता है — विफल होने पर null (graceful fallback)
-        async function loadAudioBuffer(url) {
-            try {
-                const response = await fetch(url);
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                const arrayBuffer = await response.arrayBuffer();
-                return await audioCtx.decodeAudioData(arrayBuffer);
-            } catch (err) {
-                console.warn(`⚠️ ऑडियो लोड विफल (${url}):`, err);
-                audioLoadFailures.push(url); // 🆕 Low-Mode बैज दिखाने हेतु ट्रैक करें
-                return null; // fallback synth-tone काम करता रहेगा
-            }
-        }
-
-        // ⚡ बैच-आधारित ऑडियो-लोडिंग: bgMusic.mp3 (~6.5MB, सबसे भारी फ़ाइल) पहले छोटी/ज़्यादा-ज़रूरी
-        // SFX फ़ाइलों के साथ एक ही Promise.all में होड़ करती थी — धीमे नेटवर्क पर browser के सीमित
-        // parallel-connections की वजह से ज़रूरी छोटी फ़ाइलें (टकराव-ध्वनियाँ, घोड़े आदि) भी देर से आती थीं।
-        // अब 2 अलग बैच: पहला (छोटा, तुरंत ज़रूरी) तुरंत शुरू होता है; दूसरा (भारी/देर-ज़रूरी, bgMusic समेत)
-        // साथ-साथ पर अलग बैच में चलता है — पहले बैच की गति पर कोई असर नहीं पड़ता।
-        async function loadAllAudioBuffers() {
-            if (!audioCtx) return;
-            // 🆕 दोनों बैच पूरे होने तक प्रतीक्षा करें (पहले fire-and-forget थे) — ताकि
-            // readiness-tracker को पता चल सके कि सभी फ़ाइलों के लोड-प्रयास (सफल/विफल) समाप्त हो गए
-            await Promise.all([loadCriticalAudioBuffers(), loadDeferredAudioBuffers()]);
-        }
-
-        // बैच 1 — छोटी फ़ाइलें जो गेमप्ले शुरू होते ही बज सकती हैं
-        // (माया-टकराव, नाम-जाप, समर्पण, घोड़े, स्वप्न-श्वास, कर्म-बंधन ध्वनियाँ)
-        async function loadCriticalAudioBuffers() {
-            const [naamaSamarpita, samarpita, punarJanma, shathendriya, sushuptiBreath, timer, prarabdhaBandhana, paapaBandhana, punyaBandhana, bandhanMukta, naama, jaapa, aakarshana, tyaaga, kripa, shankhaDhwani, jyotiDhwani, shankhaPrapta, jyotiPrapta, purnaSamarpana, drishti, andhakaara] = await Promise.all([
-                loadAudioBuffer('./audio/naamaSamarpita.mp3'),
-                loadAudioBuffer('./audio/samarpita.mp3'),
-                loadAudioBuffer('./audio/punaraJanma.mp3'),
-                loadAudioBuffer('./audio/shathendriya.mp3'),
-                loadAudioBuffer('./audio/sushuptiSwaansa.mp3'),
-                loadAudioBuffer('./audio/timer.mp3'),
-                loadAudioBuffer('./audio/prarabdhaBandhana.mp3'),
-                loadAudioBuffer('./audio/paapaBandhana.mp3'),
-                loadAudioBuffer('./audio/punyaBandhana.mp3'),
-                loadAudioBuffer('./audio/bandhanaMukta.mp3'),
-                loadAudioBuffer('./audio/naamaDhwani.mp3'),
-                loadAudioBuffer('./audio/jaapaDhwani.mp3'),
-                loadAudioBuffer('./audio/aakarshana.mp3'),
-                loadAudioBuffer('./audio/tyaaga.mp3'),
-                loadAudioBuffer('./audio/kripaDhwani.mp3'),
-                loadAudioBuffer('./audio/shankhaDhwani.mp3'),
-                loadAudioBuffer('./audio/jyotiDhwani.mp3'),
-                loadAudioBuffer('./audio/shankhaPrapta.mp3'),
-                loadAudioBuffer('./audio/jyotiPrapta.mp3'),
-                loadAudioBuffer('./audio/purnaSamarpana.mp3'),
-                loadAudioBuffer('./audio/drishti.mp3'),
-                loadAudioBuffer('./audio/andhakaara.mp3')
-            ]);
-            audioBuffers.naamaSamarpita = naamaSamarpita;
-            audioBuffers.samarpita = samarpita;
-            audioBuffers.punarJanma = punarJanma;
-            audioBuffers.shathendriya = shathendriya;
-            audioBuffers.sushuptiBreath = sushuptiBreath;
-            audioBuffers.timer = timer;
-            audioBuffers.prarabdhaBandhana = prarabdhaBandhana;
-            audioBuffers.paapaBandhana = paapaBandhana;
-            audioBuffers.punyaBandhana = punyaBandhana;
-            audioBuffers.bandhanMukta = bandhanMukta;
-            audioBuffers.naamaDhwani = naama;
-            audioBuffers.jaapaDhwani = jaapa;
-            audioBuffers.aakarshana = aakarshana;
-            audioBuffers.tyaaga = tyaaga;
-            audioBuffers.kripaDhwani = kripa;
-            audioBuffers.shankhaDhwani = shankhaDhwani;
-            audioBuffers.jyotiDhwani = jyotiDhwani;
-            audioBuffers.shankhaPrapta = shankhaPrapta;
-            audioBuffers.jyotiPrapta = jyotiPrapta;
-            audioBuffers.purnaSamarpana = purnaSamarpana;
-            audioBuffers.drishti = drishti;
-            audioBuffers.andhakaara = andhakaara;
-
-            // अगर bgMusic-ग्राफ़ पहले से चल रहा है (देर से बने AudioContext की स्थिति में) तो ये layers अभी जोड़ें
-            if (bgMusicStarted) {
-                startRunningHorsesLayer();
-                if (!chetanaaJagrita) startSushuptiBreathLayer();
-            }
-        }
-
-        // बैच 2 — भारी (bgMusic, ~6.5MB) व देर से ज़रूरी ध्वनियाँ (चेतना-जागृति/मोक्ष/प्रलय/अंतिम-चरण)
-        // बैच 1 से अलग रखा गया ताकि शुरुआती गेमप्ले SFX bgMusic.mp3 के पीछे network-queue में न अटकें
-        async function loadDeferredAudioBuffers() {
-            const [bg, chetana, pralaya, jagritaBreath, moksha, antimCharana] = await Promise.all([
-                loadAudioBuffer('./audio/bgMusic.mp3'),
-                loadAudioBuffer('./audio/chetanaJagrita.mp3'),
-                loadAudioBuffer('./audio/pralaya.mp3'),
-                loadAudioBuffer('./audio/jagritaBreath.mp3'),
-                loadAudioBuffer('./audio/moksha.mp3'),
-                loadAudioBuffer('./audio/antimaCharana.mp3')
-            ]);
-            audioBuffers.bgMusic = bg;
-            audioBuffers.chetanaJagrita = chetana;
-            audioBuffers.pralaya = pralaya;
-            audioBuffers.jagritaBreath = jagritaBreath;
-            audioBuffers.moksha = moksha;
-            audioBuffers.antimCharana = antimCharana;
-
-            // अगर bgMusic-ग्राफ़ पहले से चल रहा है तो bgMusic-layer (व jagritaBreath अगर जागृत हो चुकी हो) अभी जोड़ें
-            if (bgMusicStarted) {
-                startBgMusicMp3Layer();
-            }
-        }
-
-        // किसी भी loaded AudioBuffer को एक बार (या loop में) बजाने का सामान्य हेल्पर
-        function playBufferedSound(buffer, destination, gainVal = 0.6, loop = false) {
-            if (!audioCtx || !buffer) return null;
-            const source = audioCtx.createBufferSource();
-            source.buffer = buffer;
-            source.loop = loop;
-            const gainNode = audioCtx.createGain();
-            gainNode.gain.setValueAtTime(gainVal, audioCtx.currentTime);
-            source.connect(gainNode);
-            gainNode.connect(destination || audioCtx.destination);
-            source.start(0);
-            return { source, gainNode };
-        }
-
-        // bgMusic.mp3 को ओम-हम (synth) के नीचे एक हल्के, लूपिंग layer के रूप में जोड़ता है।
-        // bgMasterGain से जुड़ने के कारण यह मौजूदा सांस-सिंक (breath-sync volume) से स्वतः प्रभावित होगा।
-        function startBgMusicMp3Layer() {
-            if (!bgMasterGain || !audioBuffers.bgMusic || bgMusicSourceNode) return; // पहले से बज रहा / अभी तैयार नहीं
-            const now = audioCtx.currentTime;
-            bgMusicMp3Gain = audioCtx.createGain();
-            bgMusicMp3Gain.gain.setValueAtTime(BG_MUSIC_MP3_LAYER_VOLUME, now);
-            bgMusicMp3Gain.connect(bgMasterGain); // 🎚️ मुख्य bgMasterGain (अब सिर्फ़ mute-नियंत्रण) में मिक्स — सांस-सिंक अब लागू नहीं
-
-            bgMusicSourceNode = audioCtx.createBufferSource();
-            bgMusicSourceNode.buffer = audioBuffers.bgMusic;
-            bgMusicSourceNode.loop = true;
-            bgMusicSourceNode.connect(bgMusicMp3Gain);
-            bgMusicSourceNode.start(now);
-        }
-
-        // दौड़ते घोड़ों की ध्वनि को bgMusic.mp3 के साथ निरंतर मिलाकर बजाता है — bgMasterGain से जुड़ने के
-        // कारण यह भी सांस-सिंक volume से स्वतः प्रभावित होगा
-        function startRunningHorsesLayer() {
-            if (!bgMasterGain || !audioBuffers.shathendriya || shathendriyaSourceNode) return;
-            const now = audioCtx.currentTime;
-            shathendriyaGain = audioCtx.createGain();
-
-            // 🛠️ सुधार: वॉल्यूम को सीधे RUNNING_HORSES_VOLUME पर सेट करने के बजाय,
-            // चेक करें कि गेम एक्टिव (isActiveGameplay) है या नहीं।
-            const initialVol = isActiveGameplay() ? RUNNING_HORSES_VOLUME : 0;
-            shathendriyaGain.gain.setValueAtTime(initialVol, now);
-
-            shathendriyaGain.connect(bgMasterGain);
-
-            shathendriyaSourceNode = audioCtx.createBufferSource();
-            shathendriyaSourceNode.buffer = audioBuffers.shathendriya;
-            shathendriyaSourceNode.loop = true;
-            shathendriyaSourceNode.connect(shathendriyaGain);
-            shathendriyaSourceNode.start(now);
-        }
-
-        // चेतना-जागृति (समर्पित = 50, chetanaaJagrita = true) के क्षण पर एक बार शुरू होने वाला निरंतर "अंतरिक्ष-श्वास" layer
-        function startJagritaBreathLayer() {
-            if (!bgMasterGain || !audioBuffers.jagritaBreath || jagritaBreathSourceNode) return;
-            const now = audioCtx.currentTime;
-            jagritaBreathGain = audioCtx.createGain();
-            // 🛠️ बग-फिक्स: sushuptiBreath जैसा ही pattern (DRY) — node बनने के तुरंत बाद ही
-            // isActiveGameplay() चेक करो, ताकि pause/shastra के दौरान node बनते ही गलती से
-            // पूर्ण-स्तर gain न मिले (पहला frame चलने से पहले की स्थिति safe रहे)
-            const initialSpaceVol = isActiveGameplay() ? JAGRITA_BREATH_VOLUME : 0;
-            jagritaBreathGain.gain.setValueAtTime(initialSpaceVol, now);
-            jagritaBreathGain.connect(bgMasterGain);
-
-            jagritaBreathSourceNode = audioCtx.createBufferSource();
-            jagritaBreathSourceNode.buffer = audioBuffers.jagritaBreath;
-            jagritaBreathSourceNode.loop = true;
-            jagritaBreathSourceNode.connect(jagritaBreathGain);
-            jagritaBreathSourceNode.start(now);
-        }
-        // पुनर्जन्म पर jagritaBreath layer को रोकता है — ताकि अगले जीवन में चेतना-जागृति पर दोबारा शुरू हो सके
-        function stopJagritaBreathLayer() {
-            if (jagritaBreathSourceNode) {
-                try { jagritaBreathSourceNode.stop(); } catch (err) { }
-                jagritaBreathSourceNode.disconnect();
-                jagritaBreathSourceNode = null;
-            }
-        }
-        // 🆕 चेतना-जागृति से पहले का "स्वप्न-श्वास" — खेल आरंभ होते ही शुरू होता है,
-        // jagritaBreathLayer जैसी ही संरचना (DRY) — बस यह चेतना-जागृति तक ही बजता है
-        function startSushuptiBreathLayer() {
-            if (!bgMasterGain || !audioBuffers.sushuptiBreath || sushuptiBreathSourceNode) return;
-            const now = audioCtx.currentTime;
-            sushuptiBreathGain = audioCtx.createGain();
-            // 🛠️ बग-फिक्स: shathendriya जैसा ही pattern (DRY) — node बनने के तुरंत बाद, पहले frame
-            // (updateAmbientVolumes) चलने से पहले ही, यह तय करता है कि शुरुआती gain 0 हो या पूर्ण-स्तर।
-            // इससे start-screen पर (pointerdown से ensureAudio() चलने पर) sushuptiBreath सुनाई नहीं देगा —
-            // सिर्फ़ असली गेमप्ले (isActiveGameplay() === true) शुरू होने पर ही यह बजेगा।
-            const initialDreamVol = isActiveGameplay() ? SUSHUPTI_BREATH_VOLUME : 0;
-            sushuptiBreathGain.gain.setValueAtTime(initialDreamVol, now);
-            sushuptiBreathGain.connect(bgMasterGain);
-            sushuptiBreathSourceNode = audioCtx.createBufferSource();
-            sushuptiBreathSourceNode.buffer = audioBuffers.sushuptiBreath;
-            sushuptiBreathSourceNode.loop = true;
-            sushuptiBreathSourceNode.connect(sushuptiBreathGain);
-            sushuptiBreathSourceNode.start(now);
-
-        }
-
-        // चेतना-जागृति होते ही (समर्पित=50) sushuptiBreath layer को रोकता है — jagritaBreath इसकी जगह लेता है।
-        // पुनर्जन्म पर भी रोका जाता है ताकि punahaPrarambha() इसे दोबारा शुरू कर सके।
-        function stopSushuptiBreathLayer() {
-            if (sushuptiBreathSourceNode) {
-                try { sushuptiBreathSourceNode.stop(); } catch (err) { }
-                sushuptiBreathSourceNode.disconnect();
-                sushuptiBreathSourceNode = null;
-            }
-        }
-        function ensureAudio() {
-            try {
-                if (!audioCtx) {
-                    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-                    if (!AudioContextClass) return;
-                    audioCtx = new AudioContextClass();
-                    // ⚡ Long-task fix: audio loading को next macrotask में defer करें —
-                    // ताकि पहला interaction frame block न हो
-                    setTimeout(() => loadAllAudioBuffers(), 0);
-                }
-                if (audioCtx.state === 'suspended') audioCtx.resume();
-                audioUnlocked = true;
-                startBackgroundMusic();   // 🔊 पहली बार audio unlock होते ही पृष्ठभूमि संगीत शुरू करें
-            } catch (err) { console.warn('Audio init failed:', err); }
-        }
-
-        function playTone(freq, duration = 0.08, type = 'sine', gain = 0.04, endFreq = null) {
-            if (!audioUnlocked || !audioCtx) return; const now = audioCtx.currentTime; const osc = audioCtx.createOscillator(); const amp = audioCtx.createGain();
-            osc.type = type; osc.frequency.setValueAtTime(freq, now); if (endFreq !== null) { osc.frequency.exponentialRampToValueAtTime(Math.max(1, endFreq), now + duration); }
-            amp.gain.setValueAtTime(0.0001, now); amp.gain.exponentialRampToValueAtTime(gain, now + 0.01); amp.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-            osc.connect(amp); amp.connect(audioCtx.destination); osc.start(now); osc.stop(now + duration + 0.03);
-        }
-
-        function playSound(name) {
-            // 🆕 SFX बजने से ठीक पहले ambient layers को duck करें — bgMusic सबसे ज़्यादा, घोड़े सबसे कम दबेंगे
-            if (DUCK_STRENGTH[name] !== undefined) duckBackgroundMusic(DUCK_STRENGTH[name]);
-            switch (name) {
-                case 'shuvha': playTone(523.25, 0.07, 'triangle', 0.035, 783.99); vibrateGamepad(0.15, 0.10, 90); break;    // पुण्य संग्रह (शुभ माया)
-                case 'rikta': playTone(155.56, 0.10, 'sawtooth', 0.03, 92.5); vibrateGamepad(0.50, 0.70, 160); break;   // अशुभ — क्रिया अवरुद्ध (action blocked UI feedback)
-                case 'ashuvha': playTone(100, 0.2, 'square', 0.015, 140); vibrateGamepad(0.30, 0.20, 80); break;   // पाप प्रहार (अशुभ माया)
-                // SPACE से नाम-जाप आरंभ — jaapaDhwani.mp3, न मिले तो synth-tone
-                case 'jaapa':
-                    if (audioBuffers.jaapaDhwani) { playBufferedSound(audioBuffers.jaapaDhwani, audioCtx.destination, 0.6); }
-                    else { playTone(880, 0.09, 'sine', 0.03, 1320); }
-                    vibrateGamepad(0.10, 0.05, 50);
-                    break;
-
-                // gamepad.X/keyboard.W/keyboard.upArrow से नाम-जाप आरंभ — jaapaDhwani.mp3, न मिले तो synth-tone
-                case 'naamaSamarpita':
-                    if (audioBuffers.naamaSamarpita) { playBufferedSound(audioBuffers.naamaSamarpita, audioCtx.destination, 0.6); }
-                    else { playTone(880, 0.09, 'sine', 0.03, 1320); }
-                    vibrateGamepad(0.10, 0.05, 50);
-                    break;
-                // 🆕 पूर्ण-समर्पण — "अंतिम चरण" में समस्त नाम अर्पित होने का विशेष क्षण (एक बार/जीवन-चक्र)
-                case 'purnaSamarpana':
-                    if (audioBuffers.purnaSamarpana) { playBufferedSound(audioBuffers.purnaSamarpana, audioCtx.destination, 0.65); }
-                    else { playTone(987.77, 0.14, 'sine', 0.04, 1567.98); }
-                    vibrateGamepad(0.20, 0.25, 130);
-                    break;
-
-                // 🆕 दृष्टि लौटी — पाप-अंधकार (ashuvhaKarma>=3) से बाहर आने पर
-                case 'drishti':
-                    if (audioBuffers.drishti) { playBufferedSound(audioBuffers.drishti, audioCtx.destination, 0.55); }
-                    else { playTone(880, 0.10, 'sine', 0.03, 1318.51); }
-                    vibrateGamepad(0.10, 0.08, 60);
-                    break;
-
-                // 🆕 पाप-अंधकार छाया — ashuvhaKarma>=3 होने पर दृष्टि के धुंधलाने का संकेत
-                case 'andhakaara':
-                    if (audioBuffers.andhakaara) { playBufferedSound(audioBuffers.andhakaara, audioCtx.destination, 0.55); }
-                    else { playTone(196.00, 0.12, 'sawtooth', 0.03, 130.81); }
-                    vibrateGamepad(0.18, 0.12, 90);
-                    break;
-
-                // 🆕 शंख-ध्वनि — Y-press पर शंख-वलय आरंभ
-                case 'shankhaDhwani':
-                    if (audioBuffers.shankhaDhwani) { playBufferedSound(audioBuffers.shankhaDhwani, audioCtx.destination, 0.65); }
-                    else { playTone(523.25, 0.12, 'sine', 0.04, 783.99); }
-                    vibrateGamepad(0.20, 0.25, 120);
-                    break;
-
-                // 🆕 शंख-प्राप्ति ध्वनि — शंख-माया संग्रह (collection) पर बजे, शंखDhwani (Y-activation) से अलग                                    
-                case 'shankhaPrapta':
-                    if (audioBuffers.shankhaPrapta) { playBufferedSound(audioBuffers.shankhaPrapta, audioCtx.destination, 0.6); }
-                    else { playTone(700, 0.10, 'sine', 0.035, 1000); }
-                    vibrateGamepad(0.12, 0.10, 70);
-                    break;
-
-                // 🆕 ज्योति-प्राप्ति ध्वनि — ज्योति-माया संग्रह (collection) पर बजे, jyotiDhwani (B-activation) से अलग                
-                case 'jyotiPrapta':
-                    if (audioBuffers.jyotiPrapta) { playBufferedSound(audioBuffers.jyotiPrapta, audioCtx.destination, 0.6); }
-                    else { playTone(740, 0.10, 'triangle', 0.035, 1050); }
-                    vibrateGamepad(0.12, 0.10, 70);
-                    break;
-
-                // 🆕 ज्योति-ध्वनि — B-press पर ज्योति-वलय आरंभ
-                case 'jyotiDhwani':
-                    if (audioBuffers.jyotiDhwani) { playBufferedSound(audioBuffers.jyotiDhwani, audioCtx.destination, 0.60); }
-                    else { playTone(659.25, 0.12, 'triangle', 0.04, 987.77); }
-                    vibrateGamepad(0.15, 0.18, 100);
-                    break;
-
-                // 🆕 कृपा प्राप्ति ध्वनि — एक दिव्य और सौम्य सिंथ-टोन (C6 से E6)
-                case 'kripa':
-                    if (audioBuffers.kripaDhwani) { playBufferedSound(audioBuffers.kripaDhwani, audioCtx.destination, 0.6); }
-                    else { playTone(1046.50, 0.15, 'sine', 0.04, 1318.51); } vibrateGamepad(0.15, 0.20, 80);
-                    break;
-
-                // 🆕 "अंतिम चरण" / "पुण्य त्यागो" अवस्था में प्रवेश का संकेत — हर जीवन-चक्र में सिर्फ़ एक बार बजे
-                // 🔧 TUNED: तेज़/कर्कश आवाज़ ठीक करने हेतु — gain घटाया (0.65 → 0.35) + सहज fade-in/fade-out
-                // envelope जोड़ा (बिना envelope के अचानक शुरू/खत्म होना ही क्लिक/पॉप जैसी कर्कशता का कारण था)
-                case 'antimCharana':
-                    if (audioBuffers.antimCharana) {
-                        const acNow = audioCtx.currentTime;
-                        const acSrc = audioCtx.createBufferSource();
-                        acSrc.buffer = audioBuffers.antimCharana;
-                        const acGain = audioCtx.createGain();
-                        const acPeakGain = 0.35;                         // 🔧 पहले 0.65 — अब सौम्य पर स्पष्ट
-                        const acDuration = acSrc.buffer.duration;
-                        acGain.gain.setValueAtTime(0.0001, acNow);
-                        acGain.gain.exponentialRampToValueAtTime(acPeakGain, acNow + 0.08);   // सहज fade-in (80ms)
-                        const acPeakHoldTime = Math.max(acNow + 0.08, acNow + acDuration - 0.15);
-                        acGain.gain.setValueAtTime(acPeakGain, acPeakHoldTime);
-                        // 🌿 गार्ड: fade-out का समय हमेशा peak-hold से कम-से-कम 20ms आगे रहे —
-                        // चाहे antimCharana.mp3 भविष्य में कितनी भी छोटी duration की फ़ाइल से बदल दी जाए,
-                        // exponentialRampToValueAtTime कभी "समय पीछे/बराबर" वाले RangeError से crash नहीं करेगा।
-                        const acFadeOutTime = Math.max(acPeakHoldTime + 0.02, acNow + acDuration - 0.02);
-                        acGain.gain.exponentialRampToValueAtTime(0.0001, acFadeOutTime); // सहज fade-out
-                        acSrc.connect(acGain);
-                        acGain.connect(audioCtx.destination);
-                        acSrc.start(acNow);
-                    } else {
-                        console.warn('⚠️ antimaCharana.mp3 लोड नहीं हुई — ./audio/antimaCharana.mp3 path जाँचें');
-                    }
-                    vibrateGamepad(0.25, 0.30, 140);
-                    break;
-
-                // 🆕 समर्पण — असली mp3 बजाएँ + debounce (तेज़ टकराव से ध्वनि धुंधली/muddy न हो)
-                case 'samarpita': {
-                    const nowMs = performance.now();
-                    if (nowMs - lastSamarpitaSoundTime >= SAMARPITA_SOUND_COOLDOWN) {
-                        lastSamarpitaSoundTime = nowMs;
-                        if (audioBuffers.samarpita) { playBufferedSound(audioBuffers.samarpita, audioCtx.destination, 0.6); }
-                        else { playTone(659.25, 0.12, 'triangle', 0.04, 987.77); setTimeout(() => playTone(987.77, 0.08, 'sine', 0.025, 1318.51), 55); }
-                    }
-                    vibrateGamepad(0.20, 0.15, 100);
-                    break;
-                }
-
-                // 🆕 घोड़े पर माया-खिंचाव (pull) आरंभ — aakarshana.mp3, न मिले तो synth-tone fallback
-                case 'aakarshana':
-                    if (audioBuffers.aakarshana) { playBufferedSound(audioBuffers.aakarshana, audioCtx.destination, 0.5); }
-                    else { playTone(440, 0.07, 'sine', 0.025, 660); }
-                    vibrateGamepad(0.08, 0.05, 40);
-                    break;          // 🆕 पुनर्जन्म स्क्रीन — असली mp3 बजाएँ, लोड न होने पर पुराना synth fallback
-                // खिंचाव-बल विघटित (pull disconnect) — tyaaga.mp3, न मिले तो पुराना synth-tone fallback
-                case 'tyaaga':
-                    if (audioBuffers.tyaaga) { playBufferedSound(audioBuffers.tyaaga, audioCtx.destination, 0.5); }
-                    else { playTone(392, 0.08, 'square', 0.025, 329.63); }
-                    vibrateGamepad(0.10, 0.06, 60);
-                    break;
-                case 'punaha':
-                    if (audioBuffers.punarJanma) { playBufferedSound(audioBuffers.punarJanma, audioCtx.destination, 0.7); }
-                    else { playTone(329.63, 0.06, 'triangle', 0.025, 523.25); setTimeout(() => playTone(659.25, 0.07, 'triangle', 0.025, 987.77), 60); }
-                    vibrateGamepad(0.60, 0.85, 280);
-                    break;
-
-                case 'viraama': playTone(220, 0.05, 'sine', 0.02, 196); break;                                                  // स्तम्भन (पॉज़)
-                case 'resume': playTone(196, 0.05, 'sine', 0.02, 220); break;                                                   // जारी रखें
-
-                // 🆕 प्रलय (FORCE STOPPED) स्क्रीन — असली mp3 बजाएँ, लोड न होने पर पुराना synth fallback
-                case 'takraava':
-                    if (audioBuffers.pralaya) { playBufferedSound(audioBuffers.pralaya, audioCtx.destination, 0.7); }
-                    else { playTone(110, 0.08, 'square', 0.03, 82.41); }
-                    vibrateGamepad(0.60, 0.90, 220);
-                    break;
-                case 'vijaya':
-                    // 🆕 मोक्ष-विजय ध्वनि — moksha.mp3, न मिले तो पुराना synth-राग fallback
-                    if (audioBuffers.moksha) {
-                        playBufferedSound(audioBuffers.moksha, audioCtx.destination, 0.7);
-                    } else {
-                        playTone(523.25, 0.12, 'sine', 0.03, 783.99); setTimeout(() => playTone(659.25, 0.12, 'sine', 0.03, 987.77), 70); setTimeout(() => playTone(783.99, 0.14, 'sine', 0.03, 1174.66), 140);
-                    }
-                    vibrateGamepad(0.3, 0.3, 150); setTimeout(() => vibrateGamepad(0.3, 0.3, 150), 200); setTimeout(() => vibrateGamepad(0.4, 0.5, 300), 400);
-                    break;
-
-                // 🆕 चेतना जागृत — विशेष क्षण की ध्वनि (समर्पित >= 50 होने पर एक बार बजे)
-                // पूरी फ़ाइल सहज fade-in के साथ बजेगी — शुरुआती क्लिक/पॉप से बचने हेतु,
-                // कोई premature stop() नहीं — पूरी buffer-duration तक प्राकृतिक रूप से बजेगी
-                case 'chetana':
-                    if (audioBuffers.chetanaJagrita) {
-                        const chetanaNow = audioCtx.currentTime;
-                        const chetanaSrc = audioCtx.createBufferSource();
-                        chetanaSrc.buffer = audioBuffers.chetanaJagrita;
-                        const chetanaGain = audioCtx.createGain();
-                        chetanaGain.gain.setValueAtTime(0.0001, chetanaNow);
-                        chetanaGain.gain.exponentialRampToValueAtTime(0.7, chetanaNow + 0.05); // हल्का fade-in
-                        chetanaSrc.connect(chetanaGain);
-                        chetanaGain.connect(audioCtx.destination);
-                        chetanaSrc.start(chetanaNow);
-                    } else {
-                        console.warn('⚠️ chetanaJagrita.mp3 लोड नहीं हुई — ./audio/chetanaJagrita.mp3 path जाँचें');
-                    }
-                    break;
-
-                // 🆕 अंतिम चरण चेतावनी (timer) — समय <100 होने पर एक बार
-                case 'timer':
-                    if (audioBuffers.timer) { playBufferedSound(audioBuffers.timer, audioCtx.destination, 0.6); }
-                    break;
-
-                // 🆕 प्रारब्ध-बंधन — जब प्रारब्ध पहली बार 0 से ऊपर जाए
-                case 'prarabdhaBandhana':
-                    if (audioBuffers.prarabdhaBandhana) { playBufferedSound(audioBuffers.prarabdhaBandhana, audioCtx.destination, 0.6); }
-                    break;
-
-                // 🆕 पाप-बंधन — जब पाप पहली बार 0 से ऊपर जाए
-                case 'paapaBandhana':
-                    if (audioBuffers.paapaBandhana) { playBufferedSound(audioBuffers.paapaBandhana, audioCtx.destination, 0.6); }
-                    break;
-
-                // 🆕 पुण्य-बंधन — जब पुण्य पहली बार 0 से ऊपर जाए
-                case 'punyaBandhana':
-                    if (audioBuffers.punyaBandhana) { playBufferedSound(audioBuffers.punyaBandhana, audioCtx.destination, 0.6); }
-                    break;
-
-                // 🆕 बंधन-मुक्ति — जब पुण्य/पाप/प्रारब्ध शून्य पर वापस आए (कर्म से मुक्ति)
-                case 'bandhanaMukta':
-                    if (audioBuffers.bandhanMukta) { playBufferedSound(audioBuffers.bandhanMukta, audioCtx.destination, 0.6); }
-                    break;
-
-                // 🆕 नाम-ध्वनि — माया-टकराव से नाम संग्रह पर (SPACE की नाम-जाप ध्वनि से अलग)
-                // naamaDhwani.mp3 graceful fallback with sine tone
-                case 'naama':
-                    if (audioBuffers.naamaDhwani) { playBufferedSound(audioBuffers.naamaDhwani, audioCtx.destination, 0.6); }
-                    else { playTone(880, 0.09, 'sine', 0.03, 1320); }
-                    vibrateGamepad(0.10, 0.05, 50);
-                    break;
-            }
-        }
-
-        // ====================== पृष्ठभूमि ध्वनि: हल्की ॐ गूंज (BACKGROUND AMBIENT MUSIC) ======================
-        // दीर्घकालिक श्रवण (years of listening) हेतु डिज़ाइन: हर स्वर detuned-twin (chorus) से बना है,
-        // सभी LFOs के rates असमान/non-synchronized हैं (predictable pattern कभी नहीं दोहराएगा),
-        // और timbre (filter brightness) भी सांस के साथ sync है — सिर्फ़ volume नहीं।
-
-        let bgMusicStarted = false;     // ग्राफ़ केवल एक बार बने — दोबारा शुरुआत से रोकने हेतु
-        let bgMusicMuted = false;       // Mute/Unmute बटन की वर्तमान स्थिति
-        let breathPulseGlobal = 0;
-        let bgMasterGain = null;        // 🆕 अब सिर्फ़ mute/unmute नियंत्रण-बिंदु — कोई breath-modulation नहीं रखता
-
-        const BG_BREATH_MOD_RANGE = 0.3; // सांस के साथ सिर्फ़ jagritaBreath का कितना % उतार-चढ़ाव हो (0 से 1 के बीच भिन्न)
-        // ====================== SFX-डकिंग (SIDECHAIN DUCKING) ======================
-        // जब भी कोई महत्वपूर्ण ध्वनि-प्रभाव (SFX) बजता है, ambient layers क्षणिक रूप से धीमी (duck) हो जाती हैं
-        // ताकि वे SFX को दबाएँ (mask/fade) न — फिर सहजता से वापस अपने सामान्य स्तर पर लौट आती हैं।
-        // हर layer की duck-तीव्रता अलग रखी गई है: घोड़े लगभग न दबें (हमेशा स्पष्ट सुनाई दें),
-        // bgMusic सबसे ज़्यादा दबे (सिर्फ़ एक हल्का "bed" है), jagritaBreath मध्यम रूप से दबे।
-        let duckLevel = 0;                          // 0 = कोई डकिंग नहीं, 1 = अधिकतम डकिंग
-        let lastDuckCheckTime = 0;                  // आख़िरी बार duckLevel कब अपडेट हुआ (audioCtx.currentTime, सेकंड में)
-        const DUCK_DECAY_PER_SEC = 1.8;             // duckLevel प्रति सेकंड कितनी तेज़ी से 0 की ओर वापस लौटे
-        const BG_MUSIC_DUCK_REDUCTION = 0.75; // bgMusic SFX पर अधिकतम कितना % धीमा हो
-        const RUNNING_HORSES_DUCK_REDUCTION = 0.15; // घोड़े बहुत हल्का duck हों — स्पष्ट सुनाई देते रहें
-        const JAGRITA_BREATH_DUCK_REDUCTION = 0.55; // jagritaBreath मध्यम रूप से duck हो
-        const SUSHUPTI_BREATH_DUCK_REDUCTION = 0.20; // 🔧 TUNED: पहले 0.55 (jagritaBreath जैसा मध्यम duck) था —
-        // बार-बार माया-टकराव/SFX से sushuptiBreath लगातार दबी रहती थी ("very low" महसूस हो रही थी)।
-        // अब घोड़ों (0.15) जैसा ही हल्का duck — sushuptiBreath ज़्यादातर समय अपने असली स्तर के पास बजेगी।
-
-        // हर SFX के नाम अनुसार उसकी "डकिंग शक्ति" — महत्वपूर्ण ध्वनियाँ ambient को ज़्यादा धीमा करें
-        const DUCK_STRENGTH = {purnaSamarpana: 0.6, drishti: 0.35, andhakaara: 0.4, shuvha: 0.5, rikta: 0.55, jaapa: 0.55, samarpita: 0.45, naamaSamarpita: 0.55, aakarshana: 0.25, tyaaga: 0.25, punaha: 0.7, viraama: 0.2, resume: 0.15, takraava: 0.7, vijaya: 0.65, chetana: 0.65, timer: 0.3, prarabdhaBandhana: 0.4, paapaBandhana: 0.4, punyaBandhana: 0.4, bandhanaMukta: 0.35, naama: 0.45, antimCharana: 0.35, kripa: 0.5, shankhaDhwani: 0.45, jyotiDhwani: 0.40, shankhaPrapta: 0.45, jyotiPrapta: 0.40 };
-
-        // duckLevel को तुरंत बढ़ाता है (अधिकतम मान रखकर — कई SFX एक साथ बजें तो ओवरलैप सही रहे)
-        function duckBackgroundMusic(strength) {
-            if (strength > duckLevel) duckLevel = strength;
-        }
-
-        // हर frame बुलाया जाता है — duckLevel को असली समय (audioCtx.currentTime) अनुसार सहजता से घटाता है
-        // (pause के दौरान भी सही गति से रिकवर होगा, क्योंकि frameNow/dt पर निर्भर नहीं)
-        function updateDuckDecay() {
-            if (!audioCtx) return;
-            const now = audioCtx.currentTime;
-            if (lastDuckCheckTime === 0) { lastDuckCheckTime = now; return; }
-            const elapsedSec = now - lastDuckCheckTime;
-            lastDuckCheckTime = now;
-            if (duckLevel > 0) { duckLevel -= DUCK_DECAY_PER_SEC * elapsedSec; if (duckLevel < 0) duckLevel = 0; }
-        }
-
-        let bgMusicVolume = 1.0;         // 🆕 उपयोगकर्ता-नियंत्रित volume multiplier (0 = मौन, 1 = पूर्ण स्तर)
-
-        // पूरे ambient ग्राफ़ को एक बार initialize करता है — पहले user-interaction पर ensureAudio() से बुलाया जाता है
-        function startBackgroundMusic() {
-            if (bgMusicStarted || !audioCtx) return;
-            bgMusicStarted = true;
-
-            // 🆕 bgMasterGain अब सिर्फ़ mute/unmute का "मुख्य द्वार" है (1 = बजे, 0 = मौन)
-            // — हर layer (bgMusic/horses/jagritaBreath) अपनी वॉल्यूम खुद संभालती है, इससे विरासत में breath-sync नहीं मिलता
-            bgMasterGain = audioCtx.createGain();
-            bgMasterGain.gain.setValueAtTime(bgMusicMuted ? 0 : 1, audioCtx.currentTime);
-            bgMasterGain.connect(audioCtx.destination);
-            startBgMusicMp3Layer();      // bgMusic.mp3 — स्थिर, हल्का ambient bed (सांस से असंबद्ध)
-            startRunningHorsesLayer();   // 🆕 दौड़ते घोड़ों की ध्वनि — स्थिर, स्पष्ट स्तर (सांस से असंबद्ध)
-            if (!chetanaaJagrita) startSushuptiBreathLayer(); // 🆕 स्वप्न-श्वास — चेतना-जागृति से पहले तक बजता है
-        }
-
-        // 🆕 जाँचता है कि अभी असली, सक्रिय गेमप्ले चल रहा है या नहीं
-        // (start-screen / pause / शास्त्र / end-screen में नहीं) — सिर्फ़ इसी अवस्था में
-        // "यात्रा के दौरान" वाली ध्वनियाँ (जैसे दौड़ते घोड़े) बजनी चाहिए
-        function isActiveGameplay() {
-            return isGameStarted && !gameOver && !won && !isPaused && !isShastraVisible;
-        }
-
-        // हर frame बुलाया जाता है — सांस (worldBreathPulse) के अनुसार volume और timbre दोनों को सहजता से sync करता है
-        // 🆕 हर ambient-layer (bgMusic, घोड़े, jagritaBreath) की वॉल्यूम अलग-अलग गणना करके सेट करता है।
-        // सिर्फ़ jagritaBreath सांस (breath) से सिंक रहता है — बाकी दोनों स्थिर रहते हैं, सिर्फ़ duck से प्रभावित होते हैं।
-        function updateAmbientVolumes() {
-            if (!bgMasterGain) return;
-
-            // समग्र mute — सभी layers इसी एक द्वार से होकर गुज़रती हैं
-            bgMasterGain.gain.value = bgMusicMuted ? 0 : 1;
-            if (bgMusicMuted) return; // मौन होने पर आगे कुछ गणना करने की ज़रूरत नहीं
-
-            // प्रत्येक layer की duck-गुणक (ducking multiplier) — परत के अनुसार अलग तीव्रता
-            const bgMusicDuckMul = 1 - (duckLevel * BG_MUSIC_DUCK_REDUCTION);
-            const shathendriyaDuckMul = 1 - (duckLevel * RUNNING_HORSES_DUCK_REDUCTION);
-            const jagritaBreathDuckMul = 1 - (duckLevel * JAGRITA_BREATH_DUCK_REDUCTION);
-            const sushuptiBreathDuckMul = 1 - (duckLevel * SUSHUPTI_BREATH_DUCK_REDUCTION); // 🆕
-
-            // 🛠️ बग-फिक्स: bgMusicVolume (slider, 0–1) अब हर layer पर लागू — पहले यह वैरिएबल
-            // सिर्फ़ set होता था, कहीं read नहीं होता था, इसलिए slider असर-हीन था
-            // bgMusic — स्थिर वॉल्यूम (सांस से असंबद्ध), duck + user-volume असर
-            if (bgMusicMp3Gain) bgMusicMp3Gain.gain.value = BG_MUSIC_MP3_LAYER_VOLUME * bgMusicDuckMul * bgMusicVolume;
-
-            // ⚡ DRY-सुधार: isActiveGameplay() नीचे तीन बार अलग-अलग call हो रहा था (नतीजा हर बार एक ही) —
-            // अब एक ही बार compute करके तीनों layers में इस्तेमाल करेंगे
-            const activeGameplayNow = isActiveGameplay();
-
-            // दौड़ते घोड़े — स्थिर वॉल्यूम (सांस से असंबद्ध), बहुत हल्का duck — हमेशा स्पष्ट सुनाई दें
-            // 🛠️ बग-फिक्स: पहले यह layer audio-unlock होते ही (start-screen पर भी) बजने लगती थी
-            // और pause/शास्त्र/end-screen में भी चलती रहती थी। अब सिर्फ़ वास्तविक गेमप्ले के दौरान बजेगी।
-            // setTargetAtTime से सहज fade-in/out होगा (अचानक 0↔1 से क्लिक/पॉप नहीं आएगा)
-            if (shathendriyaGain) {
-                const targetVol = RUNNING_HORSES_VOLUME * shathendriyaDuckMul * bgMusicVolume * (activeGameplayNow ? 1 : 0);
-                shathendriyaGain.gain.setTargetAtTime(targetVol, audioCtx.currentTime, 0.08);
-            }
-
-            // jagritaBreath — सांस (breath) से सिंक + sushuptiBreath जैसा ही gameplay-gating
-            // 🛠️ बग-फिक्स: पहले pause/shastra/pralaya/moksha में भी बजती रहती थी क्योंकि
-            // isActiveGameplay() का कोई गुणक यहाँ नहीं था। setTargetAtTime से सहज fade (क्लिक/पॉप नहीं)
-            if (jagritaBreathGain) {
-                const breathVolume = JAGRITA_BREATH_VOLUME * (1 - BG_BREATH_MOD_RANGE + breathPulseGlobal * BG_BREATH_MOD_RANGE);
-                const targetSpaceVol = breathVolume * jagritaBreathDuckMul * bgMusicVolume * (activeGameplayNow ? 1 : 0);
-                jagritaBreathGain.gain.setTargetAtTime(targetSpaceVol, audioCtx.currentTime, 0.08);
-            }
-
-            // 🆕 sushuptiBreath — चेतना-जागृति से पहले भी सांस (breath) के साथ सिंक (jagritaBreath जैसा ही pattern)
-            // 🛠️ बग-फिक्स: shathendriya जैसा ही gameplay-gating — pause/shastra/pralaya/moksha पर मौन,
-            // सक्रिय गेमप्ले में सहजता से (fade) वापस — setTargetAtTime से कोई क्लिक/पॉप नहीं आएगा
-            if (sushuptiBreathGain) {
-                const dreamVolume = SUSHUPTI_BREATH_VOLUME * (1 - BG_BREATH_MOD_RANGE + breathPulseGlobal * BG_BREATH_MOD_RANGE);
-                const targetDreamVol = dreamVolume * sushuptiBreathDuckMul * bgMusicVolume * (activeGameplayNow ? 1 : 0);
-                sushuptiBreathGain.gain.setTargetAtTime(targetDreamVol, audioCtx.currentTime, 0.08);
-            }
-
-
-        }
-
-        // Mute/Unmute बटन का toggle-हैंडलर — आइकॉन भी अपडेट करता है
-        function toggleBgMusic() {
-            bgMusicMuted = !bgMusicMuted;
-            const btn = document.getElementById('music-toggle-btn');
-            if (btn) btn.textContent = bgMusicMuted ? '🔇' : '🔊';
-            updateAmbientVolumes();
-        }
 
         // ====================== GAMEPAD MODULE (गेमपैड नियंत्रण) ======================
 
@@ -2203,13 +1478,13 @@
         document.getElementById('resume-btn').addEventListener('click', () => { isPaused = false; UI.viraamaOverlay.style.display = 'none'; lastTime = performance.now(); playSound('resume'); });
         document.getElementById('restart-btn').addEventListener('click', () => { UI.viraamaOverlay.style.display = 'none'; punahaPrarambha(); lastTime = performance.now(); });
         document.getElementById('quit-btn').addEventListener('click', () => { UI.viraamaOverlay.style.display = 'none'; gameOver = true; showEndScreen("FORCE STOPPED"); playSound('takraava'); });
-        document.getElementById('music-toggle-btn').addEventListener('click', () => { ensureAudio(); toggleBgMusic(); });
+        document.getElementById('music-toggle-btn').addEventListener('click', () => { AudioManager.ensureAudio(); AudioManager.toggleBgMusic(); });
         // 🆕 शास्त्र-हेल्प बटन — सभी screens (start/gameplay/pause/end) पर उपलब्ध, ऊँचे z-index के कारण
-        document.getElementById('shastra-help-btn').addEventListener('click', () => { ensureAudio(); toggleShastra(); });
+        document.getElementById('shastra-help-btn').addEventListener('click', () => { AudioManager.ensureAudio(); toggleShastra(); });
         document.getElementById('shastra-close-btn').addEventListener('click', () => { toggleShastra(); });
         document.getElementById('music-volume-slider').addEventListener('input', (e) => {
-            bgMusicVolume = e.target.value / 100;   // 0–100 range को 0.0–1.0 में बदलें
-            updateAmbientVolumes();                 // audio-refactor में updateAmbientVolumes() से replace हुआ था, यह कॉल-साइट अपडेट नहीं हुई थी
+            AudioManager.bgMusicVolume = e.target.value / 100;   // 0–100 range को 0.0–1.0 में बदलें
+            AudioManager.updateAmbientVolumes();                 // audio-refactor में updateAmbientVolumes() से replace हुआ था, यह कॉल-साइट अपडेट नहीं हुई थी
         });
 
         // 🆕 शास्त्र खोलने/बंद करने का केंद्रीकृत हेल्पर (DRY) — पहले यह logic सिर्फ़
@@ -2265,7 +1540,7 @@
             // return कर देता है — कोई गेमप्ले-key (q/r/f/space) कभी आगे (keys[key]=true) तक नहीं पहुँचती।
             if (!isGameStarted && key !== 'escape' && !isShastraVisible) return;
 
-            ensureAudio();
+            AudioManager.ensureAudio();
 
             if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'q', 'f', 'r', 'escape', 'pageup', 'pagedown'].includes(key)) { e.preventDefault(); }
 
@@ -2401,7 +1676,7 @@
             if (upKey === 'arrowdown') shastraKeyState.down = false;
         });
         window.addEventListener('blur', () => { keys = {}; });
-        window.addEventListener('pointerdown', ensureAudio, { passive: true });
+        window.addEventListener('pointerdown', () => AudioManager.ensureAudio(), {passive: true });
 
         window.addEventListener('gamepadconnected', (e) => {
             gamepadIndex = e.gamepad.index;
@@ -2430,7 +1705,7 @@
                     keys = {};
                     updateAlert("⏸️ खेल स्तम्भित: ध्यान भटका, टैब बदला गया।", "#ffd700");
                     // 🛠️ सुधार: टैब बदलने पर तुरंत आवाज़ बंद (डकिंग) करें
-                    updateAmbientVolumes();
+                    AudioManager.updateAmbientVolumes();
                 }
             }
         });
@@ -2441,8 +1716,8 @@
             if (!gameOver && !chetanaaJagrita && samarpita >= CHETANA_JAGRITI_THRESHOLD) {
                 chetanaaJagrita = true;
                 playSound('chetana'); // 🆕 "चेतना जागृत" का विशेष क्षण — एक बार बजती है
-                stopSushuptiBreathLayer();       // 🆕 स्वप्न-श्वास अब बंद — चेतना जागृत हो चुकी
-                startJagritaBreathLayer();      // 🆕 अंतरिक्ष-श्वास layer अब bgMusic के साथ शुरू
+                AudioManager.stopSushuptiBreathLayer();       // 🆕 स्वप्न-श्वास अब बंद — चेतना जागृत हो चुकी
+                AudioManager.startJagritaBreathLayer();      // 🆕 अंतरिक्ष-श्वास layer अब bgMusic के साथ शुरू
                 addFloatingText("👁️", "#ffffff", { yOffset: -10, alpha: 1.5, vy: -3, isBigName: true });
             }
             // (startJagritaBreathLayer स्वयं jagritaBreathSourceNode चेक करती है — हर frame call की ज़रूरत नहीं)
@@ -2949,9 +2224,9 @@
             ctx.save();
             let worldBreathPhase = swaansaTimer / 360;
             let worldBreathPulse = (Math.sin(worldBreathPhase * Math.PI * 2 - Math.PI / 2) + 1) / 2;
-            breathPulseGlobal = worldBreathPulse;
-            updateDuckDecay();          // 🆕 हर frame डकिंग को सहजता से रिकवर करें
-            updateAmbientVolumes();     // 🔊 हर ambient-layer की वॉल्यूम अलग-अलग अपडेट करें (सिर्फ़ jagritaBreath सांस-सिंक्ड)        
+            AudioManager.breathPulseGlobal = worldBreathPulse;
+            AudioManager.updateDuckDecay();          // 🆕 हर frame डकिंग को सहजता से रिकवर करें
+            AudioManager.updateAmbientVolumes();     // 🔊 हर ambient-layer की वॉल्यूम अलग-अलग अपडेट करें (सिर्फ़ jagritaBreath सांस-सिंक्ड)        
 
             ctx.globalCompositeOperation = 'screen';
             // ⚡ परफ़ॉर्मेंस-सुधार: gradient सिर्फ़ तभी दोबारा बनाओ जब worldBreathPulse का "bucket" बदला हो —
@@ -3672,7 +2947,7 @@
         function scaleGame() {
             const s = Math.min(window.innerWidth / 600, window.innerHeight / 680) * 0.90;
             UI.container.style.transform = `scale(${s})`;
-            if (!isScaleGameDone) { isScaleGameDone = true; checkReadiness(); }
+            AudioManager.setScaleDone();
         }
         scaleGame(); const debouncedScale = debounce(scaleGame, 200); window.addEventListener('resize', debouncedScale);
 
@@ -3710,10 +2985,7 @@
                 }
             }
 
-            if (audioCtx && audioCtx.state === 'suspended') {
-                audioCtx.resume();
-            }
-            ensureAudio();
+            AudioManager.ensureAudio();
 
             startScreen.style.display = 'none';
 
@@ -3793,7 +3065,7 @@
                     "<span style='color: rgba(255,255,255,0.6); font-size: 13px; line-height: 1.6; display: block; max-width: 90%; margin: 0 auto;'>" +
                     "<b>गुणों और कर्मों से परे</b><br>अद्भुत अनुभूति! सारथी ने इंद्रियों रूपी घोड़ों को स्थिर रखा और मन को पूर्णतः आसक्ति मुक्त कर दिया। ब्रह्मांडीय क्षितिज पर, जहाँ न कोई पाप शेष था और न ही कोई पुण्य, भौतिक रथ पंचतत्वों में विलीन हो गया और आत्मा परम चेतना से एकाकार हो गई।</span>" +
                     `<br><br><div style="font-size: 10px; color: #444; font-family: sans-serif;">Developed by Weired Codes</div>`;
-                playSound('vijaya');
+                AudioManager.playSound('vijaya');
             } else {
                 UI.overlayTitle.innerText = "संसार में पुनर्जन्म";
                 UI.overlayTitle.style.color = "#ff3232";
@@ -3821,8 +3093,8 @@
             resetAllGlowRings(); // 🆕 रिफ़ैक्टर: ज्योति/शंख/कृपा तीनों वलयों को एक ही कॉल से रीसेट (DRY)
             for (let i = 0; i < glowEffectPool.length; i++) { glowEffectPool[i].active = false; } // 🛠️ बग-फिक्स: गेन्ड-आभा pool (gained-glow) भी पुनर्जन्म पर रीसेट करें — particlePool/mayaPool की तरह
             mayaConsumedWhilePulling = false; prevPulledHorseIndex = -1; // 🆕 pull-संबंधित ध्वनि flags भी रीसेट
-            stopJagritaBreathLayer(); // 🆕 अंतरिक्ष-श्वास layer रोकें — अगले जीवन में चेतना-जागृति पर दोबारा शुरू होगी
-            startSushuptiBreathLayer(); // 🆕 स्वप्न-श्वास layer फिर से शुरू करें — नए जीवन-चक्र की शुरुआत से चेतना-जागृति तक
+            AudioManager.stopJagritaBreathLayer(); // 🆕 अंतरिक्ष-श्वास layer रोकें — अगले जीवन में चेतना-जागृति पर दोबारा शुरू होगी
+            AudioManager.startSushuptiBreathLayer(); // 🆕 स्वप्न-श्वास layer फिर से शुरू करें — नए जीवन-चक्र की शुरुआत से चेतना-जागृति तक
             oldStats = {purnaSamarpana: "", naama: -1, punya: -1, paap: -1, prarabdha: -1, samarpita: -1, punaraJanma: -1, gatee: "-1", kripa: -1, chetana: "", shankha: -1, drishti: "", jyoti: -1 };
             UI.overlay.style.display = 'none';
             UI.viraamaOverlay.style.display = 'none';
@@ -3832,6 +3104,12 @@
             updateAlert("♻️ पवित्र पुनर्जन्म: नया सफर शुरू होता है।", "#32ff32");
             notifyTimer = 100; notifyText = "♻️ पवित्र पुनर्जन्म"; // 🆕 स्वैच्छिक (R-key/restart-btn) पुनर्जन्म — कैनवस पर स्पष्ट संकेत
         }   
+        AudioManager.setGameStateProvider(() => ({
+            isGameStarted, gameOver, won, isPaused,
+            isShastraVisible, chetanaaJagrita
+        }));
+        AudioManager.setVibrateGamepad(vibrateGamepad);
+        AudioManager.init();
     </script>
 </body>
 </html>
