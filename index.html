@@ -739,7 +739,9 @@
     </main>
 
     <script src="src/audio.js"></script>
-    <script>
+    <script type="module">
+        import { Renderer } from './src/render.js';
+
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d', {
             alpha: false,           // background transparent नहीं — compositing cost बचे
@@ -786,26 +788,63 @@
         const TUNNEL_X = (WIDTH - TUNNEL_WIDTH) / 2;
         let player = { x: WIDTH / 2 - 30, y: HEIGHT - 250, width: 60, height: 60, baseSpeed: 8 };
         let mayaPool = [];
+        let stars = [];
+        let tunnelSparkles = [];
+        let particlePool = [];
+        let glowEffectPool = [];
+        let smoothSize = 60; let bodyGlowColor = "#ffffff"; let playerInTunnel = false; let frameNow = 0;
+        let glowRings = {
+            jyoti: { active: false, radius: 0, speed: 18, maxRadius: 420, strokeColor: "rgba(255, 233, 50, 0.85)", lineWidthMul: 0.004, shadowBlur: 28, glowColor: "#ffe932", fillColor: "rgba(255, 233, 50, 0.05)" },
+            shankha: { active: false, radius: 0, speed: 18, maxRadius: 420, strokeColor: "rgba(220, 240, 255, 0.85)", lineWidthMul: 0.004, shadowBlur: 28, glowColor: "#ddf0ff", fillColor: "rgba(220, 240, 255, 0.04)" },
+            kripa: { active: false, radius: 0, speed: 22, maxRadius: 420, strokeColor: "rgba(255, 215, 0, 0.85)", lineWidthMul: 0.005, shadowBlur: 22, glowColor: "#ffd700", fillColor: "rgba(255, 215, 0, 0.06)" }
+        };
+        const outerOrbits = [
+            { count: 0, color: "#32ff32", speed: 0.8, emoji: "🌿" },   // पुण्य
+            { count: 0, color: "#ff3232", speed: -0.9, emoji: "🥀" },  // पाप
+            { count: 0, color: "#a78bfa", speed: 0.6, emoji: "📜" },   // प्रारब्ध       
+            { count: 0, color: "#ffffff", speed: 1.0, emoji: "ॐ" },    // नाम
+            { count: 0, color: "#ffe9a8", speed: 0.7, emoji: "✋" },   // 🆕 कृपा — सुनहरी कक्षा
+            { count: 0, color: "#7dd3fc", speed: 0.5, emoji: "🐚" },   // 🆕 शंख — संख्या के अनुसार घूर्णन
+            { count: 0, color: "#ffe932", speed: -0.6, emoji: "🪔" },   // 🆕 ज्योति — संख्या के अनुसार घूर्णन                                   
+            { count: 0, color: "#fb923c", speed: 1.1, emoji: "🙏" },   // समर्पित
+            { count: 0, color: "#f87171", speed: -0.5, emoji: "♻️" },  // पुनर्जन्म
+
+        ];
+        let swaansaTimer = 0;
+        let worldBreathPhase = swaansaTimer / 360;
+        let worldBreathPulse = (Math.sin(worldBreathPhase * Math.PI * 2 - Math.PI / 2) + 1) / 2;
+        let sharirPulseScale = 1 + (worldBreathPulse * 0.28);
+        let breathingSmoothSize = smoothSize * sharirPulseScale; let sharirGlow = 8 + worldBreathPulse * 28; let sharirAlpha = 0.4 + worldBreathPulse * 0.6;
+        let gatiRadius = (breathingSmoothSize / 2) + 5;   // गति-वलय: शरीर से 5px बाहर
+        let samayRadius = gatiRadius + 12;                 // 🆕 समय-वलय: गति-वलय से 12px बाहर (9→12, स्पष्ट पृथक्करण हेतु)
+        let chainSlots = [{ active: false, color: "", strength: 0, isHeavy: false }, { active: false, color: "", strength: 0, isHeavy: false }, { active: false, color: "", strength: 0, isHeavy: false }];
+        let finalHorsePositions = [{ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }];
+        let floatingTextPool = []; for (let i = 0; i < 25; i++) { floatingTextPool.push({ active: false, x: 0, y: 0, text: "", color: "#ffffff", alpha: 0, vy: 0, isBigName: false, _cachedTextWidth: undefined, _cachedText: "" }); }
+        let outerRadius = gatiRadius + ((samayRadius - gatiRadius) / 2);
+        const SAMAYA_PRAARAMBHIKA = 2880;
+
+        Renderer.init(ctx, WIDTH, HEIGHT);
+        
+        const renderState = {
+            WIDTH, HEIGHT, TUNNEL_X, TUNNEL_WIDTH, SAMAYA_PRAARAMBHIKA, stars, tunnelSparkles, particlePool, glowEffectPool, player, glowRings, chainSlots, finalHorsePositions, mayaPool, floatingTextPool, outerOrbits
+        };
         for (let i = 0; i < 50; i++)
         {
             mayaPool.push({ active: false, x: 0, y: 0, width: 20, height: 24, type: "rikta", isPulling: false });
         }
-        let stars = [];
+        
         // ⚡ DRY/परफ़ॉर्मेंस-सुधार: particles अब mayaPool जैसा ही pre-allocated, fixed-size pool है —
         // कोई push()/splice() नहीं होगा (GC-pressure व array-fragmentation से बचाव हेतु)
-        let particlePool = []; for (let i = 0; i < 50; i++) { particlePool.push({ active: false, x: 0, y: 0, vx: 0, vy: 0, radius: 0, color: "#ffffff", alpha: 0 }); }
+         for (let i = 0; i < 50; i++) { particlePool.push({ active: false, x: 0, y: 0, vx: 0, vy: 0, radius: 0, color: "#ffffff", alpha: 0 }); }
         // 🆕 "गेन्ड" (प्राप्ति) प्रभाव हेतु अलग pool — explosion (कण उड़ना — समर्पण का भाव) से अलग,
         // यह सिर्फ़ एक कोमल फैलती-मिटती वलय है (DRY: particlePool जैसा ही pool-pattern)
-        let glowEffectPool = []; for (let i = 0; i < 20; i++) { glowEffectPool.push({ active: false, x: 0, y: 0, radius: 0, maxRadius: 0, color: "#ffffff", alpha: 0 }); }
+         for (let i = 0; i < 20; i++) { glowEffectPool.push({ active: false, x: 0, y: 0, radius: 0, maxRadius: 0, color: "#ffffff", alpha: 0 }); }
         // 🆕 परफ़ॉर्मेंस-ऑडिट फिक्स: floatingTexts भी अब बाकी pools जैसा pre-allocated, fixed-size
         // pool है (नाम-जाप core gameplay-loop है — सबसे गर्म पथ; push/splice से GC-pressure बचाव)
-        let floatingTextPool = []; for (let i = 0; i < 25; i++) { floatingTextPool.push({ active: false, x: 0, y: 0, text: "", color: "#ffffff", alpha: 0, vy: 0, isBigName: false, _cachedTextWidth: undefined, _cachedText: "" }); }
         // 🆕 परफ़ॉर्मेंस-ऑडिट फिक्स: कर्म-chains (अधिकतम 3) व घोड़ों की स्थिति (सदैव 6) — संख्या
         // स्थिर होने से इन्हें draw() के हर-frame नए local array बनाने के बजाय module-scope पर
         // pre-allocate कर हर frame सिर्फ़ overwrite किया जाता है (कोई push/splice नहीं)
-        let chainSlots = [{ active: false, color: "", strength: 0, isHeavy: false }, { active: false, color: "", strength: 0, isHeavy: false }, { active: false, color: "", strength: 0, isHeavy: false }];
-        let finalHorsePositions = [{ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }];
-        let tunnelSparkles = [];
+        
         let shuvhaKarma = 0; let ashuvhaKarma = 0; let activeNaam = 0;
         let prarabdha = 0; let samarpita = 0; let punaraJanmaCount = 0; let isKarmaImmune = false;
         let kripa = 0; // 🆕 कृपा (grace) — दुर्लभ अनुग्रह-काउंटर: माया-संग्रह व जन्म-बोनस दोनों से बढ़ता है
@@ -818,21 +857,16 @@
         // व update()/draw() में 3 अलग (पर लगभग identical) ब्लॉक थे। अब एक साझा object + दो generic
         // हेल्पर-फ़ंक्शन (updateGlowRing/drawGlowRing — नीचे "ग्लो/पार्टिकल हेल्पर्स" सेक्शन में परिभाषित) —
         // नया glow-वलय जोड़ना अब सिर्फ़ इस object में एक entry जोड़ने जितना आसान है।
-        let glowRings = {
-            jyoti: { active: false, radius: 0, speed: 18, maxRadius: 420, strokeColor: "rgba(255, 233, 50, 0.85)", lineWidthMul: 0.004, shadowBlur: 28, glowColor: "#ffe932", fillColor: "rgba(255, 233, 50, 0.05)" },
-            shankha: { active: false, radius: 0, speed: 18, maxRadius: 420, strokeColor: "rgba(220, 240, 255, 0.85)", lineWidthMul: 0.004, shadowBlur: 28, glowColor: "#ddf0ff", fillColor: "rgba(220, 240, 255, 0.04)" },
-            kripa: { active: false, radius: 0, speed: 22, maxRadius: 420, strokeColor: "rgba(255, 215, 0, 0.85)", lineWidthMul: 0.005, shadowBlur: 22, glowColor: "#ffd700", fillColor: "rgba(255, 215, 0, 0.06)" }
-        };
+
         let oldStats = { naama: 0, punya: 0, paap: 0, prarabdha: 0, samarpita: 0, punaraJanma: 0, gatee: "100%", kripa: 0, chetana: "", shankha: 0, drishti: "", purnaSamarpana: "", jyoti: 0 };
         let uiScales = { naama: 1, punya: 1, paap: 1, prarabdha: 1, samarpita: 1, punaraJanma: 1, gatee: 1, kripa: 1, chetana: 1, shankha: 1, drishti: 1, purnaSamarpana: 1, jyoti: 1 };
         let uiGlows = { naama: 0, punya: 0, paap: 0, prarabdha: 0, samarpita: 0, punaraJanma: 0, gatee: 0, kripa: 0, chetana: 0, shankha: 0, drishti: 0, purnaSamarpana: 0, jyoti: 0 };
         //swaasa = samaya / 288
-        const SAMAYA_PRAARAMBHIKA = 2880;      // 🆕 प्रारंभिक व पुनर्जन्म-पश्चात समय-मान (initial + rebirth samaya value) — यहीं घोषित ताकि नीचे `samaya` declaration से पहले उपलब्ध हो (temporal-dead-zone बग-फिक्स)
-        let samaya = SAMAYA_PRAARAMBHIKA; let swaansa = 10; let swaansaTimer = 0;
+              // 🆕 प्रारंभिक व पुनर्जन्म-पश्चात समय-मान (initial + rebirth samaya value) — यहीं घोषित ताकि नीचे `samaya` declaration से पहले उपलब्ध हो (temporal-dead-zone बग-फिक्स)
+        let samaya = SAMAYA_PRAARAMBHIKA; let swaansa = 10; 
         let gameOver = false; let isPaused = false; let won = false; let spawnTimer = 0; let keys = {};
         let wasAlreadyPaused = false; // 🛠️ बग-फिक्स: shastra open होने से पहले का pause-state 
         let shakeTimer = 0; let swaansaSamapta = false; let naamaGlowTimer = 0; let bodyGlowTimer = 0;
-        let smoothSize = 60; let bodyGlowColor = "#ffffff"; let playerInTunnel = false; let frameNow = 0;
         let currentBorderColor = "";
         let cachedBreathGrad = null; let cachedBreathGradBucket = -1;     // ⚡ breathGrad gradient-cache (bucket-आधारित)
         let cachedTunnelGrad = null; let cachedTunnelGradBucket = -1;     // ⚡ tunnelBgGrad gradient-cache (bucket-आधारित)
@@ -850,18 +884,7 @@
         let lastTime = 0;
         let purnaSamarpana = false;
         //outerOrbits — outer orbiting icons (ॐ, ✋, 🌿, 🥀, 📜, ♻️, 🙏, 🌬️, 🐚, 🪔) — प्रत्येक icon के लिए count/speed/color/emoji
-        const outerOrbits = [
-            { count: 0, color: "#32ff32", speed: 0.8, emoji: "🌿" },   // पुण्य
-            { count: 0, color: "#ff3232", speed: -0.9, emoji: "🥀" },  // पाप
-            { count: 0, color: "#a78bfa", speed: 0.6, emoji: "📜" },   // प्रारब्ध       
-            { count: 0, color: "#ffffff", speed: 1.0, emoji: "ॐ" },    // नाम
-            { count: 0, color: "#ffe9a8", speed: 0.7, emoji: "✋" },   // 🆕 कृपा — सुनहरी कक्षा
-            { count: 0, color: "#7dd3fc", speed: 0.5, emoji: "🐚" },   // 🆕 शंख — संख्या के अनुसार घूर्णन
-            { count: 0, color: "#ffe932", speed: -0.6, emoji: "🪔" },   // 🆕 ज्योति — संख्या के अनुसार घूर्णन                                   
-            { count: 0, color: "#fb923c", speed: 1.1, emoji: "🙏" },   // समर्पित
-            { count: 0, color: "#f87171", speed: -0.5, emoji: "♻️" },  // पुनर्जन्म
 
-        ];
         let pendingGoodKarma = false; let punyaTimer = 0; let pendingGoodKarmaCount = 0;
         let pulledHorseIndex = -1; let pulledHorseX = 0; let pulledHorseY = 0;
         let prevPulledHorseIndex = -1;   // 🆕 आकर्षण/त्याग एज-डिटेक्शन हेतु
@@ -2226,8 +2249,6 @@
             if (samaya < 100 && !swaansaSamapta) { ctx.fillStyle = "rgba(255, 0, 0, " + (1 - samaya / 100) * 0.35 + ")"; ctx.fillRect(0, 0, WIDTH, HEIGHT); }
 
             ctx.save();
-            let worldBreathPhase = swaansaTimer / 360;
-            let worldBreathPulse = (Math.sin(worldBreathPhase * Math.PI * 2 - Math.PI / 2) + 1) / 2;
             AudioManager.breathPulseGlobal = worldBreathPulse;
             AudioManager.updateDuckDecay();          // 🆕 हर frame डकिंग को सहजता से रिकवर करें
             AudioManager.updateAmbientVolumes();     // 🔊 हर ambient-layer की वॉल्यूम अलग-अलग अपडेट करें (सिर्फ़ jagritaBreath सांस-सिंक्ड)        
@@ -2314,7 +2335,6 @@
             drawGlowRing(cx, cy, glowRings.shankha);
             drawGlowRing(cx, cy, glowRings.kripa);
 
-            let sharirPulseScale = 1 + (worldBreathPulse * 0.28);
             // 🆕 सक्रिय बंधन गतिशील रूप से केंद्रित — जितने active, उतने समान अंतर पर cx के इर्द-गिर्द
             // ⚡ परफ़ॉर्मेंस-सुधार: हर frame नया local array बनाने के बजाय pre-allocated chainSlots
             // को overwrite करें — active flag से "इस frame में दिखेगा या नहीं" तय करें
@@ -2330,7 +2350,6 @@
                 const c = chainSlots[i];
                 drawKarmaChain(chainCx, chainCy, c.color, c.strength, c.isHeavy);
             });
-            let breathingSmoothSize = smoothSize * sharirPulseScale; let sharirGlow = 8 + worldBreathPulse * 28; let sharirAlpha = 0.4 + worldBreathPulse * 0.6;
             // ⚡ Fix #4 — naamaGlow + bodyGlow: दो अलग save/restore → एक shared block (Firefox flush कम)
             if (naamaGlowTimer > 0 || bodyGlowTimer > 0) {
                 ctx.save();
@@ -2615,8 +2634,6 @@
             // 🛠️ रिफ़ैक्टर: पहले ये वलय emoji-orbit के बाहर (outerRadius+18) थे — इससे dots & emojis
             // दोनों वलयों के अंदर फँस जाते थे। अब ये शरीर (breathingSmoothSize/2) के ठीक बाहर हैं,
             // और dots की baseDist इनसे शुरू होती है — सभी dots हमेशा दोनों वलयों के बाहर रहेंगे।
-            let gatiRadius = (breathingSmoothSize / 2) + 5;   // गति-वलय: शरीर से 5px बाहर
-            let samayRadius = gatiRadius + 12;                 // 🆕 समय-वलय: गति-वलय से 12px बाहर (9→12, स्पष्ट पृथक्करण हेतु)
             
             // ====================== 🔴 सूर्य-यंत्र-प्रेरित लाल नियॉन वलय-आभा ======================
             // गति-वलय व समय-वलय के चारों ओर पूर्ण 360° लाल नियॉन हेलो —
@@ -2857,7 +2874,6 @@
             // 🆕 चेतना, दृष्टि, पूर्ण-समर्पण व अन्य सक्रिय तत्वों की प्रतीक-कक्षा — अब गति-वलय व समय-वलय
             // के ठीक बीच (पहले यह सबसे बाहर, सभी कर्म-कक्षाओं/dots के पार थी) — लॉजिक/रोटेशन अपरिवर्तित,
             // केवल outerRadius का सूत्र गति↔समय के मध्य-बिंदु पर स्थानांतरित किया गया
-            let outerRadius = gatiRadius + ((samayRadius - gatiRadius) / 2);
             let emojiRenderTime = frameNow / 1800;
 
             let innerOrbit = [
@@ -2965,7 +2981,42 @@
                 update(dt);
             }
             lastTime = ts;
-            draw();
+
+            renderState.frameNow = frameNow;
+            renderState.shakeTimer = shakeTimer;
+            renderState.samaya = samaya;
+            renderState.swaansaSamapta = swaansaSamapta;
+            renderState.smoothSize = smoothSize;
+            renderState.shuvhaKarma = shuvhaKarma;
+            renderState.ashuvhaKarma = ashuvhaKarma;
+            renderState.prarabdha = prarabdha;
+            renderState.activeNaam = activeNaam;
+            renderState.kripa = kripa;
+            renderState.shankha = shankha;
+            renderState.jyoti = jyoti;
+            renderState.samarpita = samarpita;
+            renderState.punaraJanmaCount = punaraJanmaCount;
+            renderState.chetanaaJagrita = chetanaaJagrita;
+            renderState.purnaSamarpana = purnaSamarpana;
+            renderState.pulledHorseIndex = pulledHorseIndex;
+            renderState.pulledHorseX = pulledHorseX;
+            renderState.pulledHorseY = pulledHorseY;
+            renderState.isPaused = isPaused;
+            renderState.gameOver = gameOver;
+            renderState.pendingGoodKarma = pendingGoodKarma;
+            renderState.punyaTimer = punyaTimer;
+            renderState.pendingGoodKarmaCount = pendingGoodKarmaCount;
+            renderState.isNaamaJaapa = isNaamaJaapa;
+            renderState.naamaGhera = naamaGhera;
+            renderState.notifyTimer = notifyTimer;
+            renderState.notifyText = notifyText;
+            renderState.swaansaTimer = swaansaTimer;
+            renderState.swaansa = swaansa;
+            renderState.naamaGlowTimer = naamaGlowTimer;
+            renderState.bodyGlowTimer = bodyGlowTimer;
+            renderState.bodyGlowColor = bodyGlowColor;
+
+            Renderer.drawScene(renderState);
             requestAnimationFrame(gameLoop);
         }
 
@@ -3084,6 +3135,7 @@
 
         function punahaPrarambha() {
             prarabdha = 0; shuvhaKarma = 0; ashuvhaKarma = 0; activeNaam = 0; samarpita = 0; punaraJanmaCount = 0; isKarmaImmune = false; kripa = 0; shankha = 0; jyoti = 0; // reset
+            
             samaya = SAMAYA_PRAARAMBHIKA; swaansa = 10;
             UI.samayaVal.innerText = `${SAMAYA_PRAARAMBHIKA}s`; UI.swaansaVal.innerText = `10`;
             chetanaaJagrita = false; purnaSamarpana = false;
