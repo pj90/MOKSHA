@@ -134,15 +134,6 @@ gameReadinessMode = (audioLoadFailures.length === 0) ? 'high' : 'low'
 
 ---
 
-## 👤 Credits
-
-**Developed by [Weired Codes](https://github.com/weiredcodes)**
-*Inspired by Katha Upanishad, Bhagavad Gita, and Sanatan Dharma.*
-
----
-
----
-
 # 📖 मोक्ष — प्रोजेक्ट संदर्भ-दस्तावेज़ (Developer Reference)
 
 > **उद्देश्य:** यह दस्तावेज़ `index.html` के लिए एक स्थायी संदर्भ (reference) है।
@@ -572,3 +563,10 @@ gameReadinessMode = (audioLoadFailures.length === 0) ? 'high' : 'low';
 
 *यह दस्तावेज़ Weired Codes द्वारा `index.html` (3835 lines) के ऑडिट पर आधारित।*
 *बड़ा रिफ़ैक्टर/नया feature जुड़ने पर इसे अपडेट करवाएँ।*
+
+## 👤 Credits
+
+**Developed by [Weired Codes](https://github.com/weiredcodes)**
+*Inspired by Katha Upanishad, Bhagavad Gita, and Sanatan Dharma.*
+
+---
