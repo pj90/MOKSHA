@@ -845,6 +845,11 @@ class AudioManager {
      * punahaPrarambha() में बुलाएँ — नए जीवन-चक्र के लिए sushuptiBreath फिर शुरू।
      * (replaces startSushuptiBreathLayer() public call in punahaPrarambha)
      */
+
+    startJagritaBreathLayer() {
+        this._startJagritaBreathLayer();
+    }
+
     startSushuptiBreathLayer() {
         this._startSushuptiBreathLayer();
     }
