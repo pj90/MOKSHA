@@ -27,7 +27,6 @@ import { KarmaEngine, SAMAYA_PRAARAMBHIKA }  from './engine.js';
 import { Audio } from './audio.js';
 
 // ====================== AUDIO (IIFE global) ======================
-// audio.js <script src> से पहले load हो चुका है — window.AudioManager
 const AM = Audio;
 
 // ====================== CANVAS SETUP ======================
@@ -170,7 +169,7 @@ function handleShastraGamepadNav(gp) {
 
     // Analog stick → smooth scroll (collision-free)
     if (stickY < -GAMEPAD_DEADZONE || stickY > GAMEPAD_DEADZONE) {
-        const body = document.getElementById('shastra-body');
+        const body = shastraBody;
         if (body) body.scrollTop += stickY * 6 * 2;
     }
 }
@@ -247,7 +246,7 @@ function toggleShastra() {
 // ArrowUp/Down को OS key-repeat पर निर्भर न रखकर — held-flag से smooth scroll
 function continuousShastraScrollLoop() {
     if (!engine.isShastraVisible) return;
-    const body = document.getElementById('shastr-body');
+    const body = document.getElementById('shastra-body');
     if(body) {
         if (shastraKeyState.up) body.scrollTop -= 6;
         if (shastraKeyState.down) body.scrollTop += 6;
@@ -400,6 +399,13 @@ document.getElementById('music-volume-slider')?.addEventListener('input', (e) =>
 // Renderer utility functions + direct ctx draws — सब यहाँ।
 
 function draw() {
+    
+    const st = engine.getState();
+    
+    AM?.setBreathPulse?.(st.worldBreathPulse ?? 0);
+    AM?.updateDuckDecay?.();
+    AM?.updateAmbientVolumes?.();
+
     Renderer.drawScene({
         // ── Canvas dimensions & Vedic constants ──
         WIDTH, HEIGHT, TUNNEL_X, TUNNEL_WIDTH,

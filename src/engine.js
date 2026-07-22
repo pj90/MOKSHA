@@ -1392,7 +1392,7 @@ export class KarmaEngine {
     _updateStatWithPulse(el, key, newVal, icon, suffix = "") {
         if (!el) return;
         if (this._oldStats[key] !== newVal) {
-            el.innerText = `${icon} ${newVal}${suffix}`;
+            el.textContent = `${icon} ${newVal}${suffix}`;
             this._uiScales[key] = 1.15; this._uiGlows[key] = 1.0;
             this._oldStats[key] = newVal;
         }

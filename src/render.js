@@ -14,6 +14,9 @@ let cachedBreathGradBucket = -1;
 let cachedTunnelGrad = null;
 let cachedTunnelGradBucket = -1;
 let sciFiGridSprite = null;
+let cachedPankhudiConsumed = null;
+let cachedPankhudiActive = null;
+let cachedPankhudiInactive = null;
 
 // ====================== 🎨 स्प्राइट और हेल्पर फंक्शन्स ======================
 
@@ -219,13 +222,6 @@ export const Renderer = {
         ctx.save();
         let worldBreathPhase = swaansaTimer / 360;
         let worldBreathPulse = (Math.sin(worldBreathPhase * Math.PI * 2 - Math.PI / 2) + 1) / 2;
-        
-        // Audio Manager calls (window पर उपलब्ध)
-        if (window.AudioManager) {
-            window.AudioManager.breathPulseGlobal = worldBreathPulse;
-            window.AudioManager.updateDuckDecay();
-            window.AudioManager.updateAmbientVolumes();
-        }
 
         ctx.globalCompositeOperation = 'screen';
         let breathGradBucket = Math.round(worldBreathPulse * 24);
@@ -661,22 +657,16 @@ export const Renderer = {
             ctx.rotate(pAngle);
 
             let grad;
-            if (isConsumed) {
-                grad = ctx.createLinearGradient(pankhudiRadius, 0, pankhudiRadius + curLength, 0);
-                grad.addColorStop(0,    "rgba(255, 236, 139, 0.95)");
-                grad.addColorStop(0.55, "rgba(255, 170,  40, 0.9)");
-                grad.addColorStop(1,    "rgba(184,  96,  20, 0.75)");
-            } else if (isActive) {
-                grad = ctx.createLinearGradient(pankhudiRadius, 0, pankhudiRadius + curLength, 0);
-                grad.addColorStop(0,    "rgba(255, 255, 200, 1.0)");  
-                grad.addColorStop(0.4,  "rgba(255, 210,  60, 1.0)");  
-                grad.addColorStop(1,    "rgba(255, 140,  20, 0.9)");  
-            } else {
-                grad = ctx.createLinearGradient(pankhudiRadius, 0, pankhudiRadius + curLength, 0);
-                grad.addColorStop(0,    "rgba(255, 236, 139, 0.95)");
-                grad.addColorStop(0.55, "rgba(255, 170,  40, 0.9)");
-                grad.addColorStop(1,    "rgba(184,  96,  20, 0.75)");
+
+            if (!cachedPankhudiConsumed) {
+                cachedPankhudiConsumed = ctx.createLinearGradient(pankhudiRadius, 0, pankhudiRadius + pankhudiLength, 0);
+                cachedPankhudiConsumed.addColorStop(0, "rgba(255, 236, 139, 0.95)");
+                cachedPankhudiConsumed.addColorStop(0.55, "rgba(255, 170, 40, 0.9)");
+                cachedPankhudiConsumed.addColorStop(1, "rgba(184, 96, 20, 0.75)");
+                cachedPankhudiActive = cachedPankhudiConsumed;
             }
+
+            grad = isActive ? cachedPankhudiActive : cachedPankhudiConsumed;
 
             ctx.beginPath();
             ctx.moveTo(pankhudiRadius, -pankhudiBaseHalfWidth);
