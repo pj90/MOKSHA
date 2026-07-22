@@ -1255,4 +1255,4 @@ class AudioManager {
  */
 const Audio = new AudioManager();
 
-window.AudioManager = Audio;
+export { Audio };

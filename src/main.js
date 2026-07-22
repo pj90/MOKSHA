@@ -24,10 +24,11 @@
 
 import { Renderer }     from './render.js';
 import { KarmaEngine, SAMAYA_PRAARAMBHIKA }  from './engine.js';
+import { Audio } from './audio.js';
 
 // ====================== AUDIO (IIFE global) ======================
 // audio.js <script src> से पहले load हो चुका है — window.AudioManager
-const AM = window.AudioManager;
+const AM = Audio;
 
 // ====================== CANVAS SETUP ======================
 const canvas = document.getElementById('gameCanvas');
