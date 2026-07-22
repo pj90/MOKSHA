@@ -1037,72 +1037,56 @@ class AudioManager {
      * बैच 1 — छोटी, gameplay शुरू होते ही ज़रूरी फ़ाइलें (22 files)।
      * (माया-टकराव, नाम-जाप, समर्पण, घोड़े, स्वप्न-श्वास, कर्म-बंधन ध्वनियाँ)
      */
-    async _loadCriticalAudioBuffers() {
-        const [
-            naamaSamarpita, samarpita, punarJanma,   shathendriya,
-            sushuptiBreath, timer,     prarabdhaBandhana, paapaBandhana,
-            punyaBandhana,  bandhanMukta, naama,     jaapa,
-            aakarshana,     tyaaga,    kripa,         shankhaDhwani,
-            jyotiDhwani,    shankhaPrapta, jyotiPrapta, purnaSamarpana,
-            drishti,        andhakaara,
-        ] = await Promise.all([
-            this._loadAudioBuffer('./audio/naamaSamarpita.mp3'),
-            this._loadAudioBuffer('./audio/samarpita.mp3'),
-            this._loadAudioBuffer('./audio/punaraJanma.mp3'),
-            this._loadAudioBuffer('./audio/shathendriya.mp3'),
-            this._loadAudioBuffer('./audio/sushuptiSwaansa.mp3'),
-            this._loadAudioBuffer('./audio/timer.mp3'),
-            this._loadAudioBuffer('./audio/prarabdhaBandhana.mp3'),
-            this._loadAudioBuffer('./audio/paapaBandhana.mp3'),
-            this._loadAudioBuffer('./audio/punyaBandhana.mp3'),
-            this._loadAudioBuffer('./audio/bandhanaMukta.mp3'),
-            this._loadAudioBuffer('./audio/naamaDhwani.mp3'),
-            this._loadAudioBuffer('./audio/jaapaDhwani.mp3'),
-            this._loadAudioBuffer('./audio/aakarshana.mp3'),
-            this._loadAudioBuffer('./audio/tyaaga.mp3'),
-            this._loadAudioBuffer('./audio/kripaDhwani.mp3'),
-            this._loadAudioBuffer('./audio/shankhaDhwani.mp3'),
-            this._loadAudioBuffer('./audio/jyotiDhwani.mp3'),
-            this._loadAudioBuffer('./audio/shankhaPrapta.mp3'),
-            this._loadAudioBuffer('./audio/jyotiPrapta.mp3'),
-            this._loadAudioBuffer('./audio/purnaSamarpana.mp3'),
-            this._loadAudioBuffer('./audio/drishti.mp3'),
-            this._loadAudioBuffer('./audio/andhakaara.mp3'),
-        ]);
+    async _loadCriticalAudioBuffers () {
+        const   CRITICAL_AUDIO_MANIFEST = [
+            { url: './audio/naamaSamarpita.mp3', key: 'naamaSamarpita' },
+            { url: './audio/samarpita.mp3', key: 'samarpita'},
+            { url: './audio/punaraJanma.mp3', key: 'punarJanma'},
+            { url: './audio/shathendriya.mp3', key: 'shathendriya'},
+            { url: './audio/sushuptiSwaansa.mp3', key: 'sushuptiBreath'},
+            { url: './audio/timer.mp3', key: 'timer'},
+            { url: './audio/prarabdhaBandhana.mp3', key: 'prarabdhaBandhana'},
+            { url: './audio/paapaBandhana.mp3', key: 'paapaBandhana'},
+            { url: './audio/punyaBandhana.mp3', key: 'punyaBandhana'},
+            { url: './audio/bandhanaMukta.mp3', key: 'bandhanMukta'},
+            { url: './audio/naamaDhwani.mp3', key: 'naamaDhwani'},
+            { url: './audio/jaapaDhwani.mp3', key: 'jaapaDhwani'},
+            { url: './audio/aakarshana.mp3', key: 'aakarshana'},
+            { url: './audio/tyaaga.mp3', key: 'tyaaga'},
+            { url: './audio/kripaDhwani.mp3', key: 'kripaDhwani'},
+            { url: './audio/shankhaDhwani.mp3', key: 'shankhaDhwani'},
+            { url: './audio/jyotiDhwani.mp3', key: 'jyotiDhwani'},
+            { url: './audio/jyotiPrapta.mp3', key: 'jyotiPrapta'},
+            { url: './audio/drishti.mp3', key: 'drishti'},
+            { url: './audio/shankhaPrapta.mp3', key: 'shankhaPrapta'},
+            { url: './audio/purnaSamarpana.mp3', key: 'purnaSamarpana'},
+            { url: './audio/andhakaara.mp3', key: 'andhakaara'}
+        ];
 
-        // audioBuffers object में assign करें (key names index.html से 1:1 match)
-        Object.assign(this.audioBuffers, {
-            naamaSamarpita,
-            samarpita,
-            punarJanma,          // (पुरानी key थी punarJanma)
-            shathendriya,
-            sushuptiBreath,
-            timer,
-            prarabdhaBandhana,
-            paapaBandhana,
-            punyaBandhana,
-            bandhanMukta,
-            naamaDhwani:    naama,
-            jaapaDhwani:    jaapa,
-            aakarshana,
-            tyaaga,
-            kripaDhwani:    kripa,
-            shankhaDhwani,
-            jyotiDhwani,
-            shankhaPrapta,
-            jyotiPrapta,
-            purnaSamarpana,
-            drishti,
-            andhakaara,
-        });
+        const CHUNK_SIZE = 4;
 
-        // ── Late-loading fix ──
-        // यदि bgMusicGraph पहले से चल रहा है (देर से बने AudioContext की स्थिति में)
-        // तो ये layers अभी जोड़ें — startBackgroundMusic() में याद नहीं आई थीं
+        for (let i = 0; i < CRITICAL_AUDIO_MANIFEST.length; i += CHUNK_SIZE){
+            const chunk = CRITICAL_AUDIO_MANIFEST.slice(i, i + CHUNK_SIZE);
+            
+            const results = await Promise.all(
+                chunk.map(({ url }) => this._loadAudioBuffer(url))
+            );
+
+            chunk.forEach(({ key }, idx) => {
+                if (results[idx] !== null) {
+                    this.audioBuffers[key] = results[idx];
+                }
+            });
+
+            if (i + CHUNK_SIZE < CRITICAL_AUDIO_MANIFEST.length) {
+                await new Promise(resolve => requestAnimationFrame(resolve));
+            }
+        }
+
         if (this._bgMusicStarted) {
             this._startRunningHorsesLayer();
             const state = this._getGameState?.();
-            if (!state?.chetanaaJagrita) {
+            if(!state?.chetanaaJagrita){
                 this._startSushuptiBreathLayer();
             }
         }
