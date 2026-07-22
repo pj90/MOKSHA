@@ -237,6 +237,7 @@ function toggleShastra() {
         // overlay DOM
         currentShastraPage = 1; updateShastraPage();
         keys = {};
+        requestAnimationFrame(continuousShastraScrollLoop);
     } else {
         keys = {};
     }
@@ -245,14 +246,12 @@ function toggleShastra() {
 // ====================== CONTINUOUS SHASTRA SCROLL ======================
 // ArrowUp/Down को OS key-repeat पर निर्भर न रखकर — held-flag से smooth scroll
 function continuousShastraScrollLoop() {
-    if (engine.isShastraVisible) {
-        const body = document.getElementById('shastra-body');
-        if (body) {
-            if (shastraKeyState.up)   body.scrollTop -= 6;
-            if (shastraKeyState.down) body.scrollTop += 6;
-        }
+    if (!engine.isShastraVisible) return;
+    const body = document.getElementById('shastr-body');
+    if(body) {
+        if (shastraKeyState.up) body.scrollTop -= 6;
+        if (shastraKeyState.down) body.scrollTop += 6;
     }
-    requestAnimationFrame(continuousShastraScrollLoop);
 }
 requestAnimationFrame(continuousShastraScrollLoop);
 
@@ -464,7 +463,7 @@ function pollGamepadOnStartScreen() {
         if (backRise) dispatchKey('keydown', 'Escape');
 
         if (engine.isShastraVisible) handleShastraGamepadNav(gp);
-    }
+}
 
     requestAnimationFrame(pollGamepadOnStartScreen);
 }

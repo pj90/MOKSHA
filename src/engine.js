@@ -357,8 +357,7 @@ export class KarmaEngine {
         // ── 1. Outer-orbit counts sync ───────────────────────
         this._syncOrbitCounts();
 
-        // ── 2. HUD update ────────────────────────────────────
-        this._updateUIStats();
+
 
         // ── 3. चेतना-जागृति (chetanaaJagrita) transition ───
         if (!this.gameOver && !this.chetanaaJagrita && this.samarpita >= CHETANA_JAGRITI_THRESHOLD) {
@@ -718,6 +717,8 @@ export class KarmaEngine {
 
         // ── 23. HUD scale/glow animations ────────────────────
         this._updateHUDAnimations(dt);
+        // ── 2. HUD update ────────────────────────────────────
+        this._updateUIStats();
     }
 
     // ====================== KEYBOARD ACTIONS ======================
@@ -735,7 +736,6 @@ export class KarmaEngine {
             this.naamaGhera = this.smoothSize / 2;
             this._cb.playSound?.('jaapa');
             this._updateAlert("🌿 नाम जपते मंगल दिसि दसहूँ 🌿", "#ffff00");
-            this._updateUIStats();
             this._addFloatingText(this.jaapaNaama, "#ffff00", { yOffset:-10, alpha:1.5, vy:-2, isBigName:true });
         } else if (this.activeNaam === 0 && !this.isNaamaJaapa) {
             this._updateAlert("❌ नाम जाप के लिए नाम की आवश्यकता है!", "#ff3232");
@@ -752,7 +752,6 @@ export class KarmaEngine {
             this.shankha--;
             this.glowRings.shankha.active = true; this.glowRings.shankha.radius = 0;
             this._cb.playSound?.('shankhaDhwani');
-            this._updateUIStats();
             this._updateAlert("🐚 शंख-ध्वनि: श्वेत प्रकाश फैल रहा है...", "#ffffff");
         } else {
             this._updateAlert("❌ शंख-शक्ति समाप्त — पहले शंख संग्रह करें।", "#ff3232");
@@ -769,7 +768,6 @@ export class KarmaEngine {
             this.jyoti--;
             this.glowRings.jyoti.active = true; this.glowRings.jyoti.radius = 0;
             this._cb.playSound?.('jyotiDhwani');
-            this._updateUIStats();
             this._updateAlert("🪔 ज्योति जली: पाप-अंधकार में प्रकाश फैल रहा है...", "#ffe932");
         } else {
             this._updateAlert("❌ ज्योति-शक्ति समाप्त — पहले ज्योति संग्रह करें।", "#ff3232");
@@ -801,7 +799,6 @@ export class KarmaEngine {
         this._addFloatingText(`+${gained} ॐ🙏`, "#ffff00", { alpha:1.5, vy:-2, isBigName:true, yOffset:-10 });
         this._updateAlert("🌿 नाम समर्पित: +" + gained + " मिले।", "#ffff00");
         this._cb.playSound?.('naamaSamarpita');
-        this._updateUIStats();
     }
 
     /**
