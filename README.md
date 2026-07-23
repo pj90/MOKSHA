@@ -94,8 +94,9 @@ http://localhost:8080
 ## 💻 System Requirements
 
 ### Browser
-- **Recommended:** Chrome / Edge (evergreen)
-- **Supported:** Firefox, Safari (evergreen)
+- ✅ **Recommended:** Chrome (fully tested — smooth 60fps)
+- ⚠️ **Firefox:** laggy; known issues — gamepad auto-detect, audio autoplay blocked
+- ⚠️ **Edge / Safari:** untested
 - **Required APIs:** HTML5 Canvas 2D, RequestAnimationFrame, Web Audio API, Fetch, **ES6 Modules**
 
 ### High Mode vs Low Mode
@@ -120,6 +121,7 @@ gameReadinessMode = (audioLoadFailures.length === 0) ? 'high' : 'low'
 2. Run in **foreground tab** (background RAF throttles timer)
 3. Browser zoom at **100%** (conflicts with `scaleGame()`)
 4. Disable aggressive extensions (may block CDN audio/fonts → Low Mode)
+5. ⚠️ Firefox पर smooth 60fps की गारंटी नहीं — **Chrome strongly recommended**
 
 ---
 
@@ -624,7 +626,9 @@ gameReadinessMode = (audioLoadFailures.length === 0) ? 'high' : 'low';
 | सर्वर/CDN | HTTP 200 | CORS/blocker → Low |
 
 ### Browser requirements
-- Chrome/Edge (recommended), Firefox, Safari — evergreen
+- ✅ Chrome — fully tested, smooth 60fps
+- ⚠️ Firefox — lag, gamepad auto-detect नहीं, audio autoplay blocked
+- ⚠️ Edge / Safari — untested
 - HTML5 Canvas 2D, RAF, fetch, **ES6 Modules** — अनिवार्य
 - Web Audio API — High Mode हेतु
 
