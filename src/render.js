@@ -659,14 +659,29 @@ export const Renderer = {
             let grad;
 
             if (!cachedPankhudiConsumed) {
+                // 🌑 खर्च — dim/धुंधला (consumed petals)
                 cachedPankhudiConsumed = ctx.createLinearGradient(pankhudiRadius, 0, pankhudiRadius + pankhudiLength, 0);
-                cachedPankhudiConsumed.addColorStop(0, "rgba(255, 236, 139, 0.95)");
-                cachedPankhudiConsumed.addColorStop(0.55, "rgba(255, 170, 40, 0.9)");
-                cachedPankhudiConsumed.addColorStop(1, "rgba(184, 96, 20, 0.75)");
+                cachedPankhudiConsumed.addColorStop(0, "rgba(173, 149, 101, 0.73)");
+                cachedPankhudiConsumed.addColorStop(0.55, "rgba(165, 131, 79, 0.76)");
+                cachedPankhudiConsumed.addColorStop(1, "rgba(146, 98, 49, 0.7)");
                 cachedPankhudiActive = cachedPankhudiConsumed;
+
+                // 🌸 अभी सांस — चमकीला white → gold (active petal)
+                cachedPankhudiActive = ctx.createLinearGradient(pankhudiRadius, 0, pankhudiRadius + pankhudiLength, 0);
+                cachedPankhudiActive.addColorStop(0, "rgba(255, 255, 255, 1.00)");
+                cachedPankhudiActive.addColorStop(0.30, "rgba(255, 240, 180, 1.00)");
+                cachedPankhudiActive.addColorStop(0.70, "rgba(255, 200, 60, 0.95)");
+                cachedPankhudiActive.addColorStop(1, "rgba(255, 160, 20, 0.90)");
+
+                // 🌕 future — सामान्य gold (inactive petals)
+                cachedPankhudiInactive = ctx.createLinearGradient(pankhudiRadius, 0, pankhudiRadius + pankhudiLength, 0);
+                cachedPankhudiInactive.addColorStop(0, "rgba(255, 236, 139, 0.95)");
+                cachedPankhudiInactive.addColorStop(0.55, "rgba(255, 170, 40, 0.90)");
+                cachedPankhudiInactive.addColorStop(1, "rgba(184, 96, 20, 0.75)");
             }
 
-            grad = isActive ? cachedPankhudiActive : cachedPankhudiConsumed;
+
+            grad = isActive ? cachedPankhudiActive : isConsumed ? cachedPankhudiConsumed : cachedPankhudiInactive;
 
             ctx.beginPath();
             ctx.moveTo(pankhudiRadius, -pankhudiBaseHalfWidth);
