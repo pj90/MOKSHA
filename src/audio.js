@@ -28,7 +28,6 @@
  *      fonts / scale readiness को main.js से poll करने के लिए
  *
  * ── main.js में उपयोग ────────────────────────────────────
- *  import { Audio } from './src/audio.js';
  *
  *  // पेज-लोड पर एक बार:
  *  Audio.setGameStateGetter(() => ({
@@ -1271,7 +1270,6 @@ class AudioManager {
 /**
  * पूरे game में एक ही AudioManager instance प्रयोग करें।
  *
- * import { Audio } from './src/audio.js';
  * Audio.setGameStateGetter(...);
  * Audio.init();
  */
