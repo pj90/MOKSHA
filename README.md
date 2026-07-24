@@ -147,7 +147,9 @@ MOKSHA/
 ├── audio/            — 28 .mp3 ambient & SFX files
 └── src/
     ├── audio.js      — AudioManager: 28-mp3 preload, ambient layers, duck system (1276 lines)
-    ├── engine.js     — KarmaEngine: Vedic logic, physics, pools, state (1449 lines)
+    ├── engine.js     — KarmaEngine: core loop, state, pools, HUD (trimmed)
+    ├── karma.js      — KarmaMixin: Vedic logic, maya, kripa, actions (new)
+    ├── physics.js    — PhysicsMixin: collision, glow-rings, particles (new)
     ├── render.js     — Renderer: Canvas draw functions, sprite caches (780 lines)
     └── main.js       — Orchestrator: wires all modules, gameLoop, input (524 lines)
 ```
@@ -157,7 +159,7 @@ MOKSHA/
 # 📖 मोक्ष — प्रोजेक्ट संदर्भ-दस्तावेज़ (Developer Reference)
 
 > **उद्देश्य:** यह दस्तावेज़ मोक्ष codebase के लिए एक स्थायी संदर्भ (reference) है।
-> **अंतिम अपडेट आधार:** ES6 Modular Refactor (~4614 lines across 4 src files + style.css)
+> **अंतिम अपडेट आधार:** ES6 Modular Refactor + engine.js split (~4614 lines across 6 src files + style.css)
 > **भाषा/स्टैक:** HTML5 Canvas, Vanilla JS ES6 Modules (no build tooling, no TypeScript, no framework), Web Audio API, Gamepad API
 
 ---
@@ -436,6 +438,8 @@ index.html
   └── src/main.js  (type="module")
         ├── import { Renderer }                from './render.js'
         ├── import { KarmaEngine, SAMAYA_... } from './engine.js'
+        │     ├── import { PhysicsMixin }      from './physics.js'
+        │     └── import { KarmaMixin }        from './karma.js'
         └── import Audio (default)             from './audio.js'
 ```
 
